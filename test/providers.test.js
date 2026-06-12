@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { resolveProvider } from '../src/providers/index.js'
 
 describe('resolveProvider', () => {
@@ -21,4 +21,35 @@ describe('resolveProvider', () => {
   it('honors explicit model override', () => {
     expect(resolveProvider({ provider: 'openai', apiKey: 'k', model: 'gpt-4o-mini' }).model).toBe('gpt-4o-mini')
   })
+})
+
+vi.mock('@anthropic-ai/sdk', () => ({
+  default: class {
+    constructor() {}
+    messages = { create: vi.fn().mockResolvedValue({
+      content: [{ type: 'tool_use', name: 'report_diagnosis', input: { rootCause: 'a', suggestedFix: 'b', confidence: 'high', files: [] } }],
+    }) }
+  },
+}))
+
+vi.mock('openai', () => ({
+  default: class {
+    constructor() {}
+    chat = { completions: { create: vi.fn().mockResolvedValue({
+      choices: [{ message: { tool_calls: [{ function: { name: 'report_diagnosis', arguments: JSON.stringify({ rootCause: 'a', suggestedFix: 'b', confidence: 'low', files: ['x'] }) } }] } }],
+    }) } }
+  },
+}))
+
+it('anthropic client returns structured diagnosis', async () => {
+  const { diagnose } = await import('../src/providers/anthropic.js')
+  const out = await diagnose({ apiKey: 'k', model: 'claude-sonnet-4-6' }, 'prompt')
+  expect(out.rootCause).toBe('a')
+  expect(out.confidence).toBe('high')
+})
+
+it('openai client returns structured diagnosis', async () => {
+  const { diagnose } = await import('../src/providers/openai.js')
+  const out = await diagnose({ apiKey: 'k', baseURL: 'https://api.x.ai/v1', model: 'grok-2' }, 'prompt')
+  expect(out.files).toEqual(['x'])
 })
