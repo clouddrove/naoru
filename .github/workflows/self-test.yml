@@ -8,8 +8,13 @@ jobs:
   break:
     runs-on: ubuntu-latest
     steps:
-      # A real, diagnosable failure: TypeError on an undefined value.
-      - run: node -e "const user = undefined; console.log('user id is', user.id)"
+      # Domain test: Docker build failure (apt-get on an Alpine base = wrong pkg manager).
+      - run: |
+          cat > Dockerfile.test <<'EOF'
+          FROM alpine:3.20
+          RUN apt-get update && apt-get install -y curl
+          EOF
+          docker build -f Dockerfile.test .
   doctor:
     needs: [break]
     if: ${{ always() && needs.break.result == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
