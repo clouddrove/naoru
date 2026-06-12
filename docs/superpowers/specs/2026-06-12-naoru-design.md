@@ -54,9 +54,12 @@ The Action itself never fails the build — all errors are caught and surfaced a
 
 ```
 naoru/
-├── action.yml              # composite action: inputs, outputs, runs
+├── action.yml              # composite action: inputs, outputs, runs (node20)
+├── Dockerfile              # portable CLI image (node:20-alpine) → ghcr.io/clouddrove/naoru
 ├── src/
-│   ├── index.js            # entry: orchestrates the flow
+│   ├── index.js            # GitHub Action entry (reads @actions/core inputs)
+│   ├── cli.js              # standalone CLI entry (reads env + flags) — runs anywhere
+│   ├── core.js            # shared orchestration: diagnose(ctx) → result
 │   ├── github.js           # fetch logs, fetch PR diff, upsert comment
 │   ├── prompt.js           # build prompt + JSON schema (provider-agnostic)
 │   ├── providers/
@@ -74,6 +77,31 @@ naoru/
 ├── LICENSE                 # Apache-2.0
 └── package.json
 ```
+
+## Two run modes
+
+Both modes share `src/core.js` (`diagnose(ctx)`), which takes a plain context object — no GitHub Actions globals inside core.
+
+| mode | entry | inputs from | trigger | comment target |
+|---|---|---|---|---|
+| **GitHub Action** | `src/index.js` → `dist/index.js` | `@actions/core` inputs + `github.context` | `if: failure()` job | sticky PR comment |
+| **Docker CLI** | `src/cli.js` | env vars + flags | any runner (GitLab dind, Jenkins, local) | GitHub PR comment if `--repo`/`--pr` given, else stdout |
+
+**Docker CLI / dind:** image `ghcr.io/clouddrove/naoru` runs as a normal container — works inside docker-in-docker runners (GitLab `image:` + dind service), Jenkins docker agents, or `docker run` locally. The CLI reads `NAORU_*` / standard env vars; it does not require the GitHub Actions environment. When no GitHub PR target is supplied, it prints the diagnosis to stdout (and exits 0 — fail-safe holds).
+
+CLI env / flags:
+
+| env | flag | meaning |
+|---|---|---|
+| `NAORU_API_KEY` | `--api-key` | LLM key |
+| `NAORU_PROVIDER` | `--provider` | provider preset |
+| `NAORU_MODEL` | `--model` | model id |
+| `NAORU_BASE_URL` | `--base-url` | endpoint override |
+| `NAORU_LOG_FILE` | `--log-file` | path to failed-job log (else stdin) |
+| `NAORU_DIFF_FILE` | `--diff-file` | path to diff (optional) |
+| `GITHUB_TOKEN` | `--github-token` | post comment (optional) |
+| — | `--repo owner/name` | GitHub repo for comment (optional) |
+| — | `--pr N` | PR number for comment (optional) |
 
 ## Tech Stack
 
