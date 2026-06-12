@@ -31,6 +31,7 @@
 
 - 🔎 **Root-cause, not noise** — reads the *failed* job's logs and the PR diff, then explains the actual cause.
 - 💬 **One sticky comment** — updates in place on every re-run. No comment spam.
+- 📋 **Works without a PR** — on `workflow_dispatch`/`schedule` runs (no PR to comment on), the diagnosis is written to the **job Step Summary** instead. Great for Terraform deploy/drift pipelines.
 - 🧠 **Any LLM** — Anthropic, OpenAI, OpenRouter, xAI (Grok), Groq, or any OpenAI-compatible endpoint.
 - 🐳 **Runs anywhere** — GitHub Action **or** a portable Docker image for GitLab dind, Jenkins, and local.
 - 🛟 **Never breaks your build** — diagnosis is comment-only and always exits 0.
