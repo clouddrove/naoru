@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # npm dependencies (SDKs, build/test tooling)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Batch dev tooling into one PR to cut noise.
+      dev-tooling:
+        dependency-type: "development"
+
+  # GitHub Actions used in our workflows (keeps actions/* current,
+  # e.g. the node20 -> node24 runner deprecation).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "ci(deps)"
