@@ -20,5 +20,5 @@ jobs:
         with:
           api-key: ${{ secrets.NAORU_LLM_KEY }}
           provider: openrouter
-          model: anthropic/claude-3.5-sonnet
+          model: openai/gpt-4o
           failed-job-name: break

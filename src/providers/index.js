@@ -1,7 +1,7 @@
 const PRESETS = {
   anthropic: { kind: 'anthropic', model: 'claude-sonnet-4-6' },
   openai:     { kind: 'openai', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  openrouter: { kind: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-3.5-sonnet' },
+  openrouter: { kind: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
   xai:        { kind: 'openai', baseURL: 'https://api.x.ai/v1', model: 'grok-2' },
   groq:       { kind: 'openai', baseURL: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
   custom:     { kind: 'openai' },
