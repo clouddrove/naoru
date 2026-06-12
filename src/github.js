@@ -1,4 +1,3 @@
-import AdmZip from 'adm-zip'
 import { MARKER } from './parse.js'
 
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g
@@ -6,28 +5,22 @@ const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g
 const LOG_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s/
 
 export function tailAndClean(text, maxLines) {
-  const clean = String(text || '').replace(ANSI, '')
-  const lines = clean.split('\n')
-  return lines.slice(-maxLines).join('\n')
+  const clean = String(text || '')
+    .split('\n')
+    .map((l) => l.replace(ANSI, '').replace(LOG_TIMESTAMP, ''))
+    .join('\n')
+  return clean.split('\n').slice(-maxLines).join('\n')
 }
 
-// The run-logs download is a ZIP of per-job/per-step .txt files. Pull out the text,
-// prefer entries belonging to the failed job, strip per-line timestamps, then tail.
-export function extractLogsFromZip(buffer, jobName, maxLines) {
-  const zip = new AdmZip(Buffer.from(buffer))
-  const entries = zip.getEntries().filter((e) => !e.isDirectory && e.entryName.endsWith('.txt'))
-  let picked = entries
+// Choose the failed job to diagnose: prefer one whose name matches `jobName`,
+// otherwise the first job that concluded in failure.
+export function pickFailedJob(jobs, jobName) {
+  const failed = (jobs || []).filter((j) => j.conclusion === 'failure')
   if (jobName) {
-    const match = entries.filter((e) => e.entryName.toLowerCase().includes(jobName.toLowerCase()))
-    if (match.length) picked = match
+    const named = failed.find((j) => j.name?.toLowerCase().includes(jobName.toLowerCase()))
+    if (named) return named
   }
-  const text = picked
-    .map((e) => e.getData().toString('utf8'))
-    .join('\n')
-    .split('\n')
-    .map((l) => l.replace(LOG_TIMESTAMP, ''))
-    .join('\n')
-  return tailAndClean(text, maxLines)
+  return failed[0] || null
 }
 
 export function findStickyComment(comments) {
@@ -35,11 +28,18 @@ export function findStickyComment(comments) {
   return hit ? hit.id : null
 }
 
-// Fetch tailed logs for the failed run. octokit is an authenticated client.
+// Fetch tailed logs for the failed job. Uses the per-JOB log endpoint (plain text),
+// which is available as soon as the job finishes — even while the overall run is still
+// in progress (the run-level zip 404s until the whole run completes).
 export async function fetchLogs(octokit, { owner, repo, runId, jobName, maxLines }) {
   try {
-    const res = await octokit.rest.actions.downloadWorkflowRunLogs({ owner, repo, run_id: runId })
-    return extractLogsFromZip(res.data, jobName, maxLines)
+    const jobs = await octokit.paginate(octokit.rest.actions.listJobsForWorkflowRun, {
+      owner, repo, run_id: runId, per_page: 100,
+    })
+    const job = pickFailedJob(jobs, jobName)
+    if (!job) return '(no failed job found in this run)'
+    const res = await octokit.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: job.id })
+    return tailAndClean(String(res.data), maxLines)
   } catch (e) {
     return `(could not fetch logs: ${e.message})`
   }

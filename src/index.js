@@ -15,21 +15,27 @@ async function run() {
   const octokit = github.getOctokit(token)
   const { owner, repo } = github.context.repo
   const prNumber = github.context.payload.pull_request?.number
-  if (!prNumber) {
-    core.warning('naoru: no pull request in context; skipping.')
-    return
-  }
   const runId = github.context.runId
 
   const logs = await fetchLogs(octokit, { owner, repo, runId, jobName, maxLines })
-  const { diff, files } = await fetchPrDiff(octokit, { owner, repo, prNumber })
+  // PR diff only exists in a pull_request context; dispatch/schedule runs have none.
+  const { diff, files } = prNumber
+    ? await fetchPrDiff(octokit, { owner, repo, prNumber })
+    : { diff: '', files: [] }
 
   const { diagnosis, markdown } = await diagnose({ provider, apiKey, baseURL, model, jobName, logs, diff, files })
-  const url = await upsertComment(octokit, { owner, repo, prNumber, body: markdown })
+
+  // Always surface the diagnosis in the run's Step Summary — works with or without a PR.
+  await core.summary.addRaw(markdown).write()
 
   core.setOutput('root-cause', diagnosis.rootCause)
   core.setOutput('confidence', diagnosis.confidence)
-  core.setOutput('comment-url', url)
+
+  // When triggered on a PR, also post/refresh the sticky comment.
+  if (prNumber) {
+    const url = await upsertComment(octokit, { owner, repo, prNumber, body: markdown })
+    core.setOutput('comment-url', url)
+  }
 }
 
 run().catch((e) => {
