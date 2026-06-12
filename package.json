@@ -17,9 +17,9 @@
     "openai": "^4.73.0"
   },
   "devDependencies": {
-    "@vercel/ncc": "^0.38.3",
-    "eslint": "^9.17.0",
-    "globals": "^14.0.0",
+    "@vercel/ncc": "^0.44.0",
+    "eslint": "^10.4.1",
+    "globals": "^17.6.0",
     "vitest": "^4.1.8"
   }
 }
