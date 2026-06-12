@@ -21,7 +21,7 @@ async function run() {
   }
   const runId = github.context.runId
 
-  const logs = await fetchLogs(octokit, { owner, repo, runId, maxLines })
+  const logs = await fetchLogs(octokit, { owner, repo, runId, jobName, maxLines })
   const { diff, files } = await fetchPrDiff(octokit, { owner, repo, prNumber })
 
   const { diagnosis, markdown } = await diagnose({ provider, apiKey, baseURL, model, jobName, logs, diff, files })

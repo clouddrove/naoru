@@ -1,11 +1,33 @@
+import AdmZip from 'adm-zip'
 import { MARKER } from './parse.js'
 
 const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g
+// GitHub prefixes every log line with an ISO-8601 timestamp; strip it to cut noise/tokens.
+const LOG_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T[\d:.]+Z\s/
 
 export function tailAndClean(text, maxLines) {
   const clean = String(text || '').replace(ANSI, '')
   const lines = clean.split('\n')
   return lines.slice(-maxLines).join('\n')
+}
+
+// The run-logs download is a ZIP of per-job/per-step .txt files. Pull out the text,
+// prefer entries belonging to the failed job, strip per-line timestamps, then tail.
+export function extractLogsFromZip(buffer, jobName, maxLines) {
+  const zip = new AdmZip(Buffer.from(buffer))
+  const entries = zip.getEntries().filter((e) => !e.isDirectory && e.entryName.endsWith('.txt'))
+  let picked = entries
+  if (jobName) {
+    const match = entries.filter((e) => e.entryName.toLowerCase().includes(jobName.toLowerCase()))
+    if (match.length) picked = match
+  }
+  const text = picked
+    .map((e) => e.getData().toString('utf8'))
+    .join('\n')
+    .split('\n')
+    .map((l) => l.replace(LOG_TIMESTAMP, ''))
+    .join('\n')
+  return tailAndClean(text, maxLines)
 }
 
 export function findStickyComment(comments) {
@@ -14,12 +36,10 @@ export function findStickyComment(comments) {
 }
 
 // Fetch tailed logs for the failed run. octokit is an authenticated client.
-export async function fetchLogs(octokit, { owner, repo, runId, maxLines }) {
+export async function fetchLogs(octokit, { owner, repo, runId, jobName, maxLines }) {
   try {
     const res = await octokit.rest.actions.downloadWorkflowRunLogs({ owner, repo, run_id: runId })
-    // res.data is a zip buffer; flatten any text we can read.
-    const text = Buffer.from(res.data).toString('utf8')
-    return tailAndClean(text, maxLines)
+    return extractLogsFromZip(res.data, jobName, maxLines)
   } catch (e) {
     return `(could not fetch logs: ${e.message})`
   }
