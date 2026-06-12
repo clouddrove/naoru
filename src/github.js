@@ -45,11 +45,27 @@ export async function fetchLogs(octokit, { owner, repo, runId, jobName, maxLines
   }
 }
 
+// Generated/bundled files that bloat the diff without helping diagnosis.
+const IGNORED_DIFF = /^(dist|dist-cli|node_modules|vendor)\/|(^|\/)(package-lock\.json|yarn\.lock|pnpm-lock\.yaml)$|\.min\.(js|css)$/
+
+// Drop generated-file sections from a unified diff, then hard-cap the length.
+export function filterDiff(diff, maxChars = 60000) {
+  if (!diff) return ''
+  const sections = String(diff).split(/(?=^diff --git )/m)
+  const kept = sections.filter((s) => {
+    const m = s.match(/^diff --git a\/\S+ b\/(\S+)/m)
+    return m ? !IGNORED_DIFF.test(m[1]) : true
+  })
+  let out = kept.join('')
+  if (out.length > maxChars) out = out.slice(0, maxChars) + '\n... (diff truncated)'
+  return out
+}
+
 export async function fetchPrDiff(octokit, { owner, repo, prNumber }) {
   try {
     const res = await octokit.rest.pulls.get({ owner, repo, pull_number: prNumber, mediaType: { format: 'diff' } })
     const files = await octokit.rest.pulls.listFiles({ owner, repo, pull_number: prNumber })
-    return { diff: res.data, files: files.data.map((f) => f.filename) }
+    return { diff: filterDiff(res.data), files: files.data.map((f) => f.filename) }
   } catch (e) {
     return { diff: `(could not fetch diff: ${e.message})`, files: [] }
   }

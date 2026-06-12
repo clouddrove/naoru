@@ -8,7 +8,8 @@ jobs:
   break:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "intentionally failing for naoru dogfood" && exit 1
+      # A real, diagnosable failure: TypeError on an undefined value.
+      - run: node -e "const user = undefined; console.log('user id is', user.id)"
   doctor:
     needs: [break]
     if: ${{ always() && needs.break.result == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
@@ -18,4 +19,6 @@ jobs:
       - uses: ./
         with:
           api-key: ${{ secrets.NAORU_LLM_KEY }}
-          provider: anthropic
+          provider: openrouter
+          model: openai/gpt-4o
+          failed-job-name: break

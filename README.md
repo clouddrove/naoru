@@ -118,7 +118,7 @@ naoru talks to **Anthropic natively** and to everything else through the **OpenA
 |---|---|---|---|
 | `anthropic` | `claude-sonnet-4-6` | Anthropic SDK | `ANTHROPIC_API_KEY` |
 | `openai` | `gpt-4o` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
-| `openrouter` | `anthropic/claude-3.5-sonnet` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| `openrouter` | `openai/gpt-4o` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
 | `xai` | `grok-2` | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `groq` | `llama-3.3-70b-versatile` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
 | `custom` | — | **set `base-url`** | any |
