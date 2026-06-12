@@ -8,17 +8,8 @@ jobs:
   break:
     runs-on: ubuntu-latest
     steps:
-      # Domain test: Terraform validate failure (unsupported argument).
-      - run: |
-          cat > main.tf <<'EOF'
-          resource "local_file" "example" {
-            content          = "hello"
-            filename         = "${path.module}/out.txt"
-            invalid_argument = true
-          }
-          EOF
-          terraform init -backend=false
-          terraform validate
+      # A real, diagnosable failure: TypeError on an undefined value.
+      - run: node -e "const user = undefined; console.log('user id is', user.id)"
   doctor:
     needs: [break]
     if: ${{ always() && needs.break.result == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
