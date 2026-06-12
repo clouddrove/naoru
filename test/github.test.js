@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import AdmZip from 'adm-zip'
-import { tailAndClean, findStickyComment, extractLogsFromZip } from '../src/github.js'
+import { tailAndClean, findStickyComment, extractLogsFromZip, filterDiff } from '../src/github.js'
 import { MARKER } from '../src/parse.js'
 
 describe('tailAndClean', () => {
@@ -49,5 +49,42 @@ describe('extractLogsFromZip', () => {
     const out = extractLogsFromZip(zip.toBuffer(), 'job', 3)
     expect(out.split('\n')).toHaveLength(3)
     expect(out).toContain('n9')
+  })
+})
+
+describe('filterDiff', () => {
+  const diff = [
+    'diff --git a/src/auth.ts b/src/auth.ts',
+    '--- a/src/auth.ts',
+    '+++ b/src/auth.ts',
+    '@@ -1 +1 @@',
+    '-if (user.id)',
+    '+if (user?.id)',
+    'diff --git a/dist/index.js b/dist/index.js',
+    '--- a/dist/index.js',
+    '+++ b/dist/index.js',
+    '@@ -1 +1 @@',
+    '+(huge minified bundle)',
+    'diff --git a/package-lock.json b/package-lock.json',
+    '+lockfile noise',
+  ].join('\n')
+
+  it('keeps source files and drops dist + lockfiles', () => {
+    const out = filterDiff(diff)
+    expect(out).toContain('src/auth.ts')
+    expect(out).toContain('user?.id')
+    expect(out).not.toContain('dist/index.js')
+    expect(out).not.toContain('package-lock.json')
+  })
+
+  it('hard-caps overly long diffs', () => {
+    const big = 'diff --git a/src/a.ts b/src/a.ts\n' + 'x'.repeat(100000)
+    const out = filterDiff(big, 1000)
+    expect(out.length).toBeLessThan(1100)
+    expect(out).toContain('(diff truncated)')
+  })
+
+  it('returns empty string for empty input', () => {
+    expect(filterDiff('')).toBe('')
   })
 })
