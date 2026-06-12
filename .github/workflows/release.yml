@@ -1,0 +1,36 @@
+name: release
+on:
+  push:
+    tags: ['v*.*.*']
+permissions:
+  contents: write
+  packages: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci && npm run build && npm run build:cli
+      - name: verify dist committed
+        run: git diff --exit-code dist dist-cli
+      - uses: softprops/action-gh-release@v2
+      - name: log in to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: build + push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/clouddrove/naoru:${{ github.ref_name }}
+            ghcr.io/clouddrove/naoru:latest
+      - name: move major tag
+        run: |
+          MAJOR="${GITHUB_REF_NAME%%.*}"
+          git tag -f "$MAJOR" && git push -f origin "$MAJOR"
