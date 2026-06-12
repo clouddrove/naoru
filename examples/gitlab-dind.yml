@@ -1,0 +1,11 @@
+# GitLab CI — diagnose a failed job from a docker-in-docker runner.
+naoru:
+  stage: .post
+  image: ghcr.io/clouddrove/naoru:v1
+  when: on_failure
+  variables:
+    NAORU_PROVIDER: xai
+    NAORU_MODEL: grok-2
+  script:
+    - cat build.log | node /app/dist-cli/index.js
+  # NAORU_API_KEY set as a masked CI/CD variable.
