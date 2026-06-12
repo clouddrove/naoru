@@ -1,4 +1,4 @@
-FROM node:20-alpine
+FROM node:24-alpine
 WORKDIR /app
 # Bundled CLI (no node_modules needed at runtime).
 COPY dist-cli/ ./dist-cli/

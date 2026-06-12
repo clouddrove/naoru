@@ -36,5 +36,5 @@ outputs:
   comment-url:
     description: 'URL of the posted/updated PR comment.'
 runs:
-  using: 'node20'
+  using: 'node24'
   main: 'dist/index.js'
