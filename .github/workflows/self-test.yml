@@ -8,13 +8,17 @@ jobs:
   break:
     runs-on: ubuntu-latest
     steps:
-      # Domain test: Docker build failure (apt-get on an Alpine base = wrong pkg manager).
+      # Domain test: Terraform validate failure (unsupported argument).
       - run: |
-          cat > Dockerfile.test <<'EOF'
-          FROM alpine:3.20
-          RUN apt-get update && apt-get install -y curl
+          cat > main.tf <<'EOF'
+          resource "local_file" "example" {
+            content          = "hello"
+            filename         = "${path.module}/out.txt"
+            invalid_argument = true
+          }
           EOF
-          docker build -f Dockerfile.test .
+          terraform init -backend=false
+          terraform validate
   doctor:
     needs: [break]
     if: ${{ always() && needs.break.result == 'failure' && github.event.pull_request.head.repo.full_name == github.repository }}
