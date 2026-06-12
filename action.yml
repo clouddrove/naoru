@@ -1,0 +1,40 @@
+name: 'naoru'
+description: 'Heal your broken CI with AI — diagnoses why your pipeline failed and comments the fix on your PR.'
+branding:
+  icon: 'activity'
+  color: 'red'
+inputs:
+  api-key:
+    description: 'LLM API key (provider-specific).'
+    required: true
+  provider:
+    description: 'anthropic | openai | openrouter | xai | groq | custom'
+    required: false
+    default: 'anthropic'
+  base-url:
+    description: 'Override LLM endpoint. Required when provider is "custom".'
+    required: false
+  model:
+    description: 'Model id. Defaults per provider.'
+    required: false
+  github-token:
+    description: 'Token for reading logs and posting comments.'
+    required: false
+    default: ${{ github.token }}
+  max-log-lines:
+    description: 'Tail this many log lines.'
+    required: false
+    default: '500'
+  failed-job-name:
+    description: 'Explicit failed job name (optional).'
+    required: false
+outputs:
+  root-cause:
+    description: 'Diagnosed root cause.'
+  confidence:
+    description: 'high | medium | low'
+  comment-url:
+    description: 'URL of the posted/updated PR comment.'
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
