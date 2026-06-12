@@ -135,7 +135,7 @@ naoru talks to **Anthropic natively** and to everything else through the **OpenA
 
 ## 🐳 Run it outside GitHub Actions (Docker / GitLab dind / Jenkins / local)
 
-The same engine ships as a `node:20-alpine` image — **`ghcr.io/clouddrove/naoru`** — so it runs anywhere, including docker-in-docker runners. It reads the failed-job log from `--log-file`/stdin and prints the diagnosis. Give it `--repo` + `--pr` + `GITHUB_TOKEN` and it also posts the GitHub PR comment.
+The same engine ships as a `node:24-alpine` image — **`ghcr.io/clouddrove/naoru`** — so it runs anywhere, including docker-in-docker runners. It reads the failed-job log from `--log-file`/stdin and prints the diagnosis. Give it `--repo` + `--pr` + `GITHUB_TOKEN` and it also posts the GitHub PR comment.
 
 ```bash
 # Pipe a failed build log straight into the container
