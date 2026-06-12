@@ -1,0 +1,23 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - name: dist freshness
+        run: |
+          npm run build
+          npm run build:cli
+          if ! git diff --exit-code dist dist-cli; then
+            echo "::error::dist/ or dist-cli/ is stale. Run 'npm run build && npm run build:cli' and commit." && exit 1
+          fi
+      - name: docker build (smoke)
+        run: docker build -t naoru:ci .
