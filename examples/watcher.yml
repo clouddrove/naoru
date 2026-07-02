@@ -1,0 +1,25 @@
+# Standalone watcher: one workflow that diagnoses failures from ALL other
+# workflows in the repo — no edits to them needed.
+#
+# Trade-off: workflow_run events carry no pull_request payload, so naoru
+# writes the diagnosis to the run's Step Summary only (no sticky PR comment,
+# no fix-mode). For PR comments and auto-fix, use the job pattern in
+# usage.yml instead.
+name: naoru
+on:
+  workflow_run:
+    workflows: ['*']
+    types: [completed]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  doctor:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: clouddrove/naoru@v0
+        with:
+          api-key: ${{ secrets.NAORU_API_KEY }}
+          provider: openrouter
+          model: openai/gpt-4o

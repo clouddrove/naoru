@@ -89,7 +89,9 @@ On the next failing run, naoru posts a 🩺 comment with the root cause and a su
 
 > ⚠️ The `permissions` block is **required** — without `actions: read` naoru can't fetch logs, and without `pull-requests: write` it can't comment.
 
-📄 Full example: [`examples/usage.yml`](examples/usage.yml)
+> 💡 Want naoru to go further? `fix-mode: suggest` posts one-click suggestion comments, `fix-mode: pr` opens a fix PR — see [Auto-fix](#-auto-fix-experimental).
+
+📄 Full examples: [`examples/usage.yml`](examples/usage.yml) (per-workflow job) · [`examples/watcher.yml`](examples/watcher.yml) (one workflow watching all others)
 
 ---
 

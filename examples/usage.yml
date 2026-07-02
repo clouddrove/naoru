@@ -9,12 +9,17 @@ jobs:
     if: ${{ always() && needs.build.result == 'failure' }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read            # bump to write for fix-mode: pr
       pull-requests: write
       actions: read
     steps:
-      - uses: clouddrove/naoru@v1
+      - uses: clouddrove/naoru@v0
         with:
           api-key: ${{ secrets.OPENAI_API_KEY }}
           provider: openai          # or anthropic | openrouter | xai | groq | custom
           model: gpt-4o
+          # Opt-in auto-fix (see README "Auto-fix"):
+          #   suggest — one-click suggestion comments on the PR
+          #   pr      — opens a naoru/fix-* PR against the failing branch
+          #             (also needs contents: write above)
+          # fix-mode: suggest
