@@ -201,6 +201,7 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | `github-token` | | `${{ github.token }}` | Token for reading logs and posting comments. |
 | `max-log-lines` | | `500` | Tail this many log lines. |
 | `failed-job-name` | | auto-detect | Explicit failed job name. |
+| `fix-mode` | | `off` | `off` \| `suggest` \| `pr` — see [Auto-fix](#-auto-fix-experimental). |
 
 </details>
 
@@ -212,8 +213,36 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | `root-cause` | Diagnosed root cause. |
 | `confidence` | `high` \| `medium` \| `low` |
 | `comment-url` | URL of the posted/updated PR comment. |
+| `fix-pr-url` | URL of the auto-opened fix PR (`fix-mode: pr` only). |
 
 </details>
+
+---
+
+## 🔧 Auto-fix (experimental)
+
+naoru can go beyond diagnosing and act on the fix. Opt in with `fix-mode`:
+
+```yaml
+- uses: clouddrove/naoru@v0
+  if: failure()
+  with:
+    api-key: ${{ secrets.NAORU_API_KEY }}
+    fix-mode: suggest   # or: pr
+```
+
+| mode | what happens | extra permissions |
+|---|---|---|
+| `suggest` | Posts one-click GitHub **suggestion** review comments on the PR, one per hunk. | `pull-requests: write` |
+| `pr` | Applies the diff on a `naoru/fix-<run-id>` branch and opens a PR **targeting the failing branch** (labelled `naoru-fix`). Never pushes to your branch. | `contents: write`, `pull-requests: write` |
+
+Safety rails, always on:
+
+- Acts only on **high-confidence** diagnoses that include a diff.
+- Never modifies anything under `.github/` (CI logs are untrusted input — a fix must not be able to rewrite your workflows).
+- Caps patches at 300 changed lines; refuses ambiguous or non-matching hunks rather than guessing.
+- Skips runs on naoru's own `naoru/fix-*` branches, so a failing fix can't loop.
+- Best-effort: any fix error is a warning, the diagnosis still ships, your pipeline is never blocked.
 
 ---
 
