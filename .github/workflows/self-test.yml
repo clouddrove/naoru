@@ -24,3 +24,4 @@ jobs:
           provider: openrouter
           model: openai/gpt-4o
           failed-job-name: break
+          fix-mode: suggest

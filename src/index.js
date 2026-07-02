@@ -2,6 +2,7 @@ import * as core from '@actions/core'
 import * as github from '@actions/github'
 import { diagnose } from './core.js'
 import { fetchLogs, fetchPrDiff, upsertComment } from './github.js'
+import { parseDiff, validateFix, postSuggestions, openFixPr, FIX_BRANCH_PREFIX } from './fix.js'
 
 async function run() {
   const apiKey = core.getInput('api-key', { required: true })
@@ -11,6 +12,7 @@ async function run() {
   const token = core.getInput('github-token') || process.env.GITHUB_TOKEN
   const maxLines = parseInt(core.getInput('max-log-lines') || '500', 10)
   const jobName = core.getInput('failed-job-name') || github.context.job || 'unknown'
+  const fixMode = (core.getInput('fix-mode') || 'off').toLowerCase()
 
   const octokit = github.getOctokit(token)
   const { owner, repo } = github.context.repo
@@ -35,6 +37,50 @@ async function run() {
   if (prNumber) {
     const url = await upsertComment(octokit, { owner, repo, prNumber, body: markdown })
     core.setOutput('comment-url', url)
+  }
+
+  if (prNumber && fixMode !== 'off') {
+    await maybeFix(octokit, { owner, repo, prNumber, runId, fixMode, diagnosis })
+  }
+}
+
+// Fix modes: 'suggest' posts ```suggestion review comments; 'pr' opens a fix PR
+// against the failing branch. Both act only on high-confidence diagnoses that
+// include a diff, and never on naoru's own fix branches (loop guard).
+async function maybeFix(octokit, { owner, repo, prNumber, runId, fixMode, diagnosis }) {
+  try {
+    const head = github.context.payload.pull_request.head
+    if (head.ref.startsWith(FIX_BRANCH_PREFIX)) {
+      core.notice('naoru fix: skipping — already on a naoru fix branch')
+      return
+    }
+    if (diagnosis.confidence !== 'high' || !diagnosis.diff) {
+      core.notice('naoru fix: skipping — needs a high-confidence diagnosis with a diff')
+      return
+    }
+    const files = parseDiff(diagnosis.diff)
+    const invalid = validateFix(files)
+    if (invalid) {
+      core.notice(`naoru fix: skipping — ${invalid}`)
+      return
+    }
+    if (fixMode === 'suggest') {
+      const posted = await postSuggestions(octokit, {
+        owner, repo, prNumber, headSha: head.sha, files, warn: core.warning,
+      })
+      core.notice(`naoru fix: posted ${posted} suggestion(s)`)
+    } else if (fixMode === 'pr') {
+      const url = await openFixPr(octokit, {
+        owner, repo, prNumber, runId, headRef: head.ref, headSha: head.sha, files, diagnosis, warn: core.warning,
+      })
+      core.setOutput('fix-pr-url', url)
+      core.notice(`naoru fix: opened ${url}`)
+    } else {
+      core.warning(`naoru fix: unknown fix-mode "${fixMode}" (use off | suggest | pr)`)
+    }
+  } catch (e) {
+    // Fail-safe: fixing is best-effort; the diagnosis already shipped.
+    core.warning(`naoru fix failed: ${e.message}`)
   }
 }
 

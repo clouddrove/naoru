@@ -28,6 +28,14 @@ inputs:
   failed-job-name:
     description: 'Explicit failed job name (optional).'
     required: false
+  fix-mode:
+    description: >-
+      off | suggest | pr. "suggest" posts one-click GitHub suggestion comments on the PR;
+      "pr" opens a naoru/fix-* branch + PR against the failing branch. Both require a
+      high-confidence diagnosis with a diff, and need pull-requests: write
+      ("pr" also needs contents: write).
+    required: false
+    default: 'off'
 outputs:
   root-cause:
     description: 'Diagnosed root cause.'
@@ -35,6 +43,8 @@ outputs:
     description: 'high | medium | low'
   comment-url:
     description: 'URL of the posted/updated PR comment.'
+  fix-pr-url:
+    description: 'URL of the auto-opened fix PR (fix-mode: pr only).'
 runs:
   using: 'node24'
   main: 'dist/index.js'
