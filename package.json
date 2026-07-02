@@ -17,12 +17,12 @@
     "@actions/core": "^3.0.1",
     "@actions/github": "^9.1.1",
     "@anthropic-ai/sdk": "^0.105.0",
-    "openai": "^6.42.0"
+    "openai": "^6.44.0"
   },
   "devDependencies": {
     "@vercel/ncc": "^0.44.0",
-    "eslint": "^10.4.1",
-    "globals": "^14.0.0",
-    "vitest": "^4.1.8"
+    "eslint": "^10.5.0",
+    "globals": "^17.6.0",
+    "vitest": "^4.1.9"
   }
 }
