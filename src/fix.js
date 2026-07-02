@@ -129,7 +129,7 @@ export async function postSuggestions(octokit, { owner, repo, prNumber, headSha,
       }
       const startLine = loc.index + 1
       const endLine = loc.index + loc.oldLines.length
-      const body = ['naoru suggested fix:', '```suggestion', ...loc.newLines, '```'].join('\n')
+      const body = ['🩺 **naoru** suggested fix:', '```suggestion', ...loc.newLines, '```'].join('\n')
       try {
         await octokit.rest.pulls.createReviewComment({
           owner, repo, pull_number: prNumber,

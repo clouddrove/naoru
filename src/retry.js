@@ -2,7 +2,9 @@
 // trip per-minute token limits (429s); those are worth waiting out.
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 529])
-const RETRYABLE_MESSAGE = /rate limit|overloaded|too many requests|temporarily unavailable/i
+// "returned no tool call" is a transient model flake (observed with minimax) —
+// the model answers in prose instead of calling the tool; a retry usually lands.
+const RETRYABLE_MESSAGE = /rate limit|overloaded|too many requests|temporarily unavailable|returned no tool call/i
 
 export function isRetryable(e) {
   const status = e?.status ?? e?.response?.status

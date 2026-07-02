@@ -246,6 +246,10 @@ Safety rails, always on:
 - Skips runs on naoru's own `naoru/fix-*` branches, so a failing fix can't loop.
 - Best-effort: any fix error is a warning, the diagnosis still ships, your pipeline is never blocked.
 
+> ⚠️ `fix-mode: pr` also needs the repo setting **Settings → Actions → General → "Allow GitHub Actions to create and approve pull requests"** enabled, or PR creation fails with *"GitHub Actions is not permitted to create or approve pull requests"*.
+
+> 🤖 Comments and fix PRs are authored by whatever identity `github-token` carries — the default token shows as `github-actions[bot]`. To have them authored as **naoru**, create a GitHub App with that name and pass its installation token as `github-token`.
+
 ---
 
 ## 💡 Good to know
