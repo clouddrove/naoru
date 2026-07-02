@@ -8,14 +8,14 @@ permissions:
   actions: read
 jobs:
   break:
-    runs-on: ubuntu-latest
+    runs-on: "arc-runners"
     steps:
       # A real, diagnosable failure: TypeError on an undefined value.
       - run: node -e "const user = undefined; console.log('user id is', user.id)"
   doctor:
     needs: [break]
     if: ${{ always() && needs.break.result == 'failure' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: ubuntu-latest
+    runs-on: "arc-runners"
     steps:
       - uses: actions/checkout@v6
       - uses: ./
