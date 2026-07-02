@@ -42,6 +42,34 @@ describe('applyHunks / locateHunk', () => {
     const hunk = { lines: [{ op: '-', text: 'dup' }, { op: '+', text: 'fixed' }] }
     expect(locateHunk(['dup', 'x', 'dup'], hunk)).toBeNull()
   })
+  it('matches when model diff loses indentation', () => {
+    const hunk = {
+      lines: [
+        { op: ' ', text: 'containers:' },
+        { op: '-', text: 'image: nginx' },
+        { op: '+', text: 'image: nginx:1.27' },
+      ],
+    }
+    const lines = ['spec:', '  containers:', '    image: nginx']
+    const loc = locateHunk(lines, hunk)
+    expect(loc).not.toBeNull()
+    expect(loc.index).toBe(1)
+  })
+  it('falls back to removed-lines-only when model context is invented', () => {
+    const hunk = {
+      lines: [
+        { op: ' ', text: 'this context does not exist' },
+        { op: '-', text: 'COPY missing-file.txt /app/' },
+        { op: '+', text: 'COPY real-file.txt /app/' },
+      ],
+    }
+    const lines = ['FROM node', 'COPY missing-file.txt /app/', 'CMD ["node"]']
+    const loc = locateHunk(lines, hunk)
+    expect(loc).not.toBeNull()
+    expect(loc.index).toBe(1)
+    expect(loc.oldLines).toEqual(['COPY missing-file.txt /app/'])
+    expect(loc.newLines).toEqual(['COPY real-file.txt /app/'])
+  })
 })
 
 describe('validateFix', () => {

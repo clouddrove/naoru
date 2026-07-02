@@ -34,29 +34,47 @@ export function parseDiff(text) {
   return files.filter((f) => f.hunks.length && f.hunks.some((h) => h.lines.some((l) => l.op !== ' ')))
 }
 
-// Find `needle` as a contiguous slice of `hay`, ignoring trailing whitespace.
-function findLines(hay, needle, from = 0) {
+// Find `needle` as a contiguous slice of `hay` under a normalizer.
+function findLines(hay, needle, norm, from = 0) {
   if (!needle.length) return -1
   outer: for (let i = from; i <= hay.length - needle.length; i++) {
     for (let j = 0; j < needle.length; j++) {
-      if (hay[i + j].trimEnd() !== needle[j].trimEnd()) continue outer
+      if (norm(hay[i + j]) !== norm(needle[j])) continue outer
     }
     return i
   }
   return -1
 }
 
-// Locate a hunk in `lines` by its old (context + removed) lines.
-// Returns { index, oldLines, newLines } or null. Uses content matching, not the
-// hunk header offsets — model-generated line numbers are unreliable.
+function uniqueMatch(lines, needle, norm) {
+  const index = findLines(lines, needle, norm)
+  if (index < 0) return -1
+  // Ambiguous match → refuse rather than patch the wrong spot.
+  if (findLines(lines, needle, norm, index + 1) >= 0) return -1
+  return index
+}
+
+// Locate a hunk in `lines` by content matching, never the hunk header offsets —
+// model-generated line numbers are unreliable, and so is model context. Tries,
+// in order: full old block ignoring trailing whitespace, full old block
+// ignoring all indentation, then just the removed lines (models often invent
+// or rewrap surrounding context, but the lines they delete must exist).
+// Returns { index, oldLines, newLines } or null.
 export function locateHunk(lines, hunk) {
   const oldLines = hunk.lines.filter((l) => l.op !== '+').map((l) => l.text)
   const newLines = hunk.lines.filter((l) => l.op !== '-').map((l) => l.text)
-  const index = findLines(lines, oldLines)
-  if (index < 0) return null
-  // Ambiguous match → refuse rather than patch the wrong spot.
-  if (findLines(lines, oldLines, index + 1) >= 0) return null
-  return { index, oldLines, newLines }
+  for (const norm of [(s) => s.trimEnd(), (s) => s.trim()]) {
+    const index = uniqueMatch(lines, oldLines, norm)
+    if (index >= 0) return { index, oldLines, newLines }
+  }
+  const removed = hunk.lines.filter((l) => l.op === '-').map((l) => l.text)
+  if (removed.length) {
+    const index = uniqueMatch(lines, removed, (s) => s.trim())
+    if (index >= 0) {
+      return { index, oldLines: removed, newLines: hunk.lines.filter((l) => l.op === '+').map((l) => l.text) }
+    }
+  }
+  return null
 }
 
 // Apply every hunk to `content`. Throws if any hunk can't be placed uniquely.
