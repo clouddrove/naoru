@@ -1,6 +1,6 @@
 {
   "name": "naoru",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Heal your broken CI with AI — diagnoses why your pipeline failed and comments the fix on your PR.",
   "license": "Apache-2.0",
   "type": "module",
