@@ -10,6 +10,11 @@ jobs:
   break:
     runs-on: "arc-runners"
     steps:
+      # The runner image has no Node preinstalled; without this the job fails
+      # with "node: command not found" instead of the intended TypeError.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
       # A real, diagnosable failure: TypeError on an undefined value.
       - run: node -e "const user = undefined; console.log('user id is', user.id)"
   doctor:
