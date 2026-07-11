@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { parseDiff, applyHunks, locateHunk, validateFix, postSuggestions, openFixPr } from '../src/fix.js'
+import { parseDiff, applyHunks, applyHunksPartial, locateHunk, validateFix, postSuggestions, openFixPr } from '../src/fix.js'
 
 const DIFF = [
   '--- a/Dockerfile',
@@ -25,6 +25,23 @@ describe('parseDiff', () => {
   it('drops files with no actual changes and returns [] for garbage', () => {
     expect(parseDiff('not a diff at all')).toEqual([])
     expect(parseDiff('')).toEqual([])
+  })
+  it('parses a diff --git header with no ---/+++ lines', () => {
+    const files = parseDiff([
+      'diff --git a/Dockerfile b/Dockerfile',
+      '@@ -1,2 +1,1 @@',
+      ' WORKDIR /app',
+      '-COPY missing-file.txt /app/',
+    ].join('\n'))
+    expect(files).toHaveLength(1)
+    expect(files[0].path).toBe('Dockerfile')
+    expect(files[0].hunks).toHaveLength(1)
+  })
+  it('does not duplicate a file when diff --git is followed by ---/+++ headers', () => {
+    const files = parseDiff(`diff --git a/Dockerfile b/Dockerfile\n${DIFF}`)
+    expect(files).toHaveLength(1)
+    expect(files[0].path).toBe('Dockerfile')
+    expect(files[0].hunks).toHaveLength(1)
   })
 })
 
@@ -54,6 +71,14 @@ describe('applyHunks / locateHunk', () => {
     const loc = locateHunk(lines, hunk)
     expect(loc).not.toBeNull()
     expect(loc.index).toBe(1)
+  })
+  it('applyHunksPartial applies locatable hunks and reports the rest', () => {
+    const [file] = parseDiff(DIFF)
+    const bogus = { lines: [{ op: '-', text: 'line that does not exist' }, { op: '+', text: 'replacement' }] }
+    const { content: out, applied, failed } = applyHunksPartial(content, [...file.hunks, bogus])
+    expect(out).toBe('WORKDIR /app\nCOPY . .\nCMD ["node", "app.js"]')
+    expect(applied).toBe(1)
+    expect(failed).toEqual([2])
   })
   it('falls back to removed-lines-only when model context is invented', () => {
     const hunk = {
@@ -147,5 +172,46 @@ describe('openFixPr', () => {
     expect(pr.base).toBe('feature-x')
     expect(pr.head).toBe('naoru/fix-42')
     expect(octokit.rest.issues.addLabels).toHaveBeenCalled()
+  })
+  it('opens a partial PR when only some hunks apply, warning about the rest', async () => {
+    const octokit = mockOctokit(content)
+    const warn = vi.fn()
+    const files = parseDiff(DIFF)
+    files[0].hunks.push({ lines: [{ op: '-', text: 'nonexistent line' }, { op: '+', text: 'x' }] })
+    const url = await openFixPr(octokit, {
+      owner: 'o', repo: 'r', prNumber: 1, runId: 42, headRef: 'feature-x', headSha: 'h',
+      files, warn,
+      diagnosis: { rootCause: 'missing file', suggestedFix: 'remove the COPY line' },
+    })
+    expect(url).toBe('https://x/pr/9')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('could not locate hunk(s) 2'))
+    const tree = octokit.rest.git.createTree.mock.calls[0][0]
+    expect(tree.tree[0].content).toBe('WORKDIR /app\nCOPY . .\nCMD ["node", "app.js"]')
+  })
+  it('throws when no hunk in any file can be applied', async () => {
+    const octokit = mockOctokit('completely unrelated content')
+    const warn = vi.fn()
+    await expect(openFixPr(octokit, {
+      owner: 'o', repo: 'r', prNumber: 1, runId: 42, headRef: 'feature-x', headSha: 'h',
+      files: parseDiff(DIFF), warn,
+      diagnosis: { rootCause: 'x', suggestedFix: 'y' },
+    })).rejects.toThrow(/no hunk of the diagnosed diff could be applied/)
+    expect(octokit.rest.pulls.create).not.toHaveBeenCalled()
+  })
+  it('skips unreadable files but still fixes readable ones', async () => {
+    const octokit = mockOctokit(content)
+    octokit.rest.repos.getContent
+      .mockRejectedValueOnce(new Error('404'))
+      .mockResolvedValueOnce({ data: { type: 'file', content: Buffer.from(content).toString('base64') } })
+    const warn = vi.fn()
+    const files = parseDiff(`--- a/Missing\n+++ b/Missing\n@@\n-gone\n+here\n${DIFF}`)
+    const url = await openFixPr(octokit, {
+      owner: 'o', repo: 'r', prNumber: 1, runId: 42, headRef: 'feature-x', headSha: 'h',
+      files, warn,
+      diagnosis: { rootCause: 'x', suggestedFix: 'y' },
+    })
+    expect(url).toBe('https://x/pr/9')
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('cannot read Missing'))
+    expect(octokit.rest.pulls.create.mock.calls[0][0].body).toContain('could not be applied')
   })
 })

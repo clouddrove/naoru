@@ -8,16 +8,28 @@ export const FIX_LABEL = 'naoru-fix'
 const PROTECTED_PATH = /^\.github\//
 
 // Parse a unified diff into per-file hunks. Tolerates model sloppiness:
-// missing `diff --git` headers, `a/`/`b/` prefixes optional, prose between files.
+// `diff --git` headers with no `---`/`+++` lines, `a/`/`b/` prefixes optional,
+// prose between files.
 export function parseDiff(text) {
   const files = []
   let file = null
   let hunk = null
   for (const line of String(text || '').split('\n')) {
-    if (line.startsWith('+++ ')) {
+    const git = /^diff --git (?:a\/)?\S+ (?:b\/)?(\S+)/.exec(line)
+    if (git) {
+      file = { path: git[1], hunks: [], fromGitHeader: true }
+      files.push(file)
+      hunk = null
+    } else if (line.startsWith('+++ ')) {
       const p = line.slice(4).trim().replace(/^b\//, '')
-      file = p && p !== '/dev/null' ? { path: p, hunks: [] } : null
-      if (file) files.push(file)
+      if (file?.fromGitHeader && !file.hunks.length) {
+        // `+++` following a `diff --git` header names the same file; it wins.
+        if (p && p !== '/dev/null') file.path = p
+        else { files.pop(); file = null }
+      } else {
+        file = p && p !== '/dev/null' ? { path: p, hunks: [] } : null
+        if (file) files.push(file)
+      }
       hunk = null
     } else if (line.startsWith('--- ')) {
       hunk = null
@@ -79,13 +91,26 @@ export function locateHunk(lines, hunk) {
 
 // Apply every hunk to `content`. Throws if any hunk can't be placed uniquely.
 export function applyHunks(content, hunks) {
-  let lines = String(content).split('\n')
-  for (const hunk of hunks) {
+  const { content: out, failed } = applyHunksPartial(content, hunks)
+  if (failed.length) throw new Error('hunk context not found (or ambiguous) in file')
+  return out
+}
+
+// Apply what can be applied; report which hunks (1-based) could not be placed.
+export function applyHunksPartial(content, hunks) {
+  const lines = String(content).split('\n')
+  const failed = []
+  let applied = 0
+  hunks.forEach((hunk, i) => {
     const loc = locateHunk(lines, hunk)
-    if (!loc) throw new Error('hunk context not found (or ambiguous) in file')
+    if (!loc) {
+      failed.push(i + 1)
+      return
+    }
     lines.splice(loc.index, loc.oldLines.length, ...loc.newLines)
-  }
-  return lines.join('\n')
+    applied++
+  })
+  return { content: lines.join('\n'), applied, failed }
 }
 
 // Sanity-gate a parsed diff before acting on it. Returns an error string or null.
@@ -154,9 +179,28 @@ export async function postSuggestions(octokit, { owner, repo, prNumber, headSha,
 // the failing branch itself.
 export async function openFixPr(octokit, { owner, repo, prNumber, runId, headRef, headSha, files, diagnosis, warn = () => {} }) {
   const updated = []
+  const dropped = []
   for (const file of files) {
-    const text = await getFileText(octokit, { owner, repo, path: file.path, ref: headSha })
-    updated.push({ path: file.path, content: applyHunks(text, file.hunks) })
+    let text
+    try {
+      text = await getFileText(octokit, { owner, repo, path: file.path, ref: headSha })
+    } catch (e) {
+      warn(`naoru fix: cannot read ${file.path}: ${e.message}`)
+      dropped.push(file.path)
+      continue
+    }
+    const { content, applied, failed } = applyHunksPartial(text, file.hunks)
+    if (failed.length) {
+      warn(`naoru fix: ${file.path}: could not locate hunk(s) ${failed.join(', ')} on the PR head; ${applied ? 'applying the rest' : 'skipping this file'}`)
+    }
+    if (!applied) {
+      dropped.push(file.path)
+      continue
+    }
+    updated.push({ path: file.path, content })
+  }
+  if (!updated.length) {
+    throw new Error(`no hunk of the diagnosed diff could be applied to the PR head (files tried: ${files.map((f) => f.path).join(', ')})`)
   }
 
   const { data: headCommit } = await octokit.rest.git.getCommit({ owner, repo, commit_sha: headSha })
@@ -186,6 +230,9 @@ export async function openFixPr(octokit, { owner, repo, prNumber, runId, headRef
       '',
       `**Suggested fix:**`,
       diagnosis.suggestedFix,
+      ...(dropped.length
+        ? ['', `> [!WARNING]`, `> Parts of the diagnosed diff could not be applied and were skipped: ${dropped.join(', ')}. See the diagnosis comment for the full diff.`]
+        : []),
       '',
       'Review carefully before merging — this patch was machine-generated from the failure diagnosis.',
     ].join('\n'),
