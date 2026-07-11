@@ -54,14 +54,21 @@ async function maybeFix(octokit, { owner, repo, prNumber, runId, fixMode, diagno
       core.notice('naoru fix: skipping — already on a naoru fix branch')
       return
     }
-    if (diagnosis.confidence !== 'high' || !diagnosis.diff) {
-      core.notice('naoru fix: skipping — needs a high-confidence diagnosis with a diff')
+    if (diagnosis.confidence !== 'high') {
+      core.notice(`naoru fix: skipping (confidence is "${diagnosis.confidence}"; fixes act only on high-confidence diagnoses)`)
+      return
+    }
+    if (!diagnosis.diff) {
+      core.notice('naoru fix: skipping (the diagnosis has no diff; the model returned prose only, so there is nothing to apply)')
       return
     }
     const files = parseDiff(diagnosis.diff)
     const invalid = validateFix(files)
     if (invalid) {
-      core.notice(`naoru fix: skipping — ${invalid}`)
+      core.notice(`naoru fix: skipping (${invalid})`)
+      if (!files.length) {
+        core.info(`naoru fix: the diagnosed diff could not be parsed. Raw diff follows:\n${diagnosis.diff}`)
+      }
       return
     }
     if (fixMode === 'suggest') {
