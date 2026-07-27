@@ -23,6 +23,11 @@ jobs:
     runs-on: "arc-runners"
     steps:
       - uses: actions/checkout@v7
+      # dist/ is gitignored and only committed onto release tags, so `uses: ./`
+      # has nothing to run until the bundle is built here.
+      - uses: actions/setup-node@v7
+        with: { node-version: '22', cache: 'npm' }
+      - run: npm ci && npm run build
       - uses: ./
         with:
           api-key: ${{ secrets.NAORU_LLM_KEY }}
