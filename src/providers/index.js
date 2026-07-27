@@ -1,6 +1,11 @@
+// toolChoice defaults to forcing report_diagnosis. Gemini's OpenAI-compat layer
+// documents only tool_choice: "auto" — the forced object form is not supported
+// there — so gemini asks instead of forces, and openai.js falls back to reading
+// the JSON out of the message content when no tool call comes back.
 const PRESETS = {
   anthropic: { kind: 'anthropic', model: 'claude-sonnet-4-6' },
   openai:     { kind: 'openai', baseURL: 'https://api.openai.com/v1', model: 'gpt-4o' },
+  gemini:     { kind: 'openai', baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.6-flash', toolChoice: 'auto' },
   openrouter: { kind: 'openai', baseURL: 'https://openrouter.ai/api/v1', model: 'openai/gpt-4o' },
   xai:        { kind: 'openai', baseURL: 'https://api.x.ai/v1', model: 'grok-2' },
   groq:       { kind: 'openai', baseURL: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile' },
@@ -18,5 +23,6 @@ export function resolveProvider({ provider = 'anthropic', apiKey, baseURL, model
     apiKey,
     baseURL: resolvedBaseURL,
     model: model || preset.model,
+    toolChoice: preset.toolChoice,
   }
 }

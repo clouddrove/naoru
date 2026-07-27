@@ -2,5 +2,12 @@ node_modules/
 *.log
 .DS_Store
 
+# Build output. Not committed on main — every dependency bump would otherwise
+# red-CI until the bundles were rebuilt by hand. The release workflow builds
+# these on a tag push and commits them onto the release tag, which is what
+# `uses: clouddrove/naoru@v0` actually resolves.
+dist/
+dist-cli/
+
 # internal planning docs (kept local, not published)
 docs/superpowers/

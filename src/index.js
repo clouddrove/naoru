@@ -13,6 +13,7 @@ async function run() {
   const maxLines = parseInt(core.getInput('max-log-lines') || '500', 10)
   const jobName = core.getInput('failed-job-name') || github.context.job || 'unknown'
   const fixMode = (core.getInput('fix-mode') || 'off').toLowerCase()
+  const instructions = core.getInput('prompt') || undefined
 
   const octokit = github.getOctokit(token)
   const { owner, repo } = github.context.repo
@@ -25,7 +26,7 @@ async function run() {
     ? await fetchPrDiff(octokit, { owner, repo, prNumber })
     : { diff: '', files: [] }
 
-  const { diagnosis, markdown } = await diagnose({ provider, apiKey, baseURL, model, jobName, logs, diff, files })
+  const { diagnosis, markdown } = await diagnose({ provider, apiKey, baseURL, model, jobName, logs, diff, files, instructions })
 
   // Always surface the diagnosis in the run's Step Summary — works with or without a PR.
   await core.summary.addRaw(markdown).write()

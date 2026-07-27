@@ -5,10 +5,10 @@ import { buildPrompt } from './prompt.js'
 import { normalize, toMarkdown } from './parse.js'
 import { withRetry } from './retry.js'
 
-// ctx: { provider, apiKey, baseURL?, model?, jobName, logs, diff, files }
+// ctx: { provider, apiKey, baseURL?, model?, jobName, logs, diff, files, instructions? }
 export async function diagnose(ctx) {
   const cfg = resolveProvider({ provider: ctx.provider, apiKey: ctx.apiKey, baseURL: ctx.baseURL, model: ctx.model })
-  const prompt = buildPrompt({ jobName: ctx.jobName, logs: ctx.logs, diff: ctx.diff, files: ctx.files })
+  const prompt = buildPrompt({ jobName: ctx.jobName, logs: ctx.logs, diff: ctx.diff, files: ctx.files, instructions: ctx.instructions })
   const call = () => (cfg.kind === 'anthropic' ? anthropicDiagnose(cfg, prompt) : openaiDiagnose(cfg, prompt))
   const raw = await withRetry(call, { log: (m) => console.warn(`naoru: ${m}`) })
   const diagnosis = normalize(raw)
