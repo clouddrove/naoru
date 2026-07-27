@@ -1,3 +1,5 @@
+import { formatUsage } from './usage.js'
+
 export const MARKER = '<!-- naoru -->'
 
 const LEVELS = ['high', 'medium', 'low']
@@ -32,8 +34,9 @@ export function normalize(raw) {
   }
 }
 
-export function toMarkdown(jobName, d) {
+export function toMarkdown(jobName, d, { usage, model } = {}) {
   const conf = d.confidence.charAt(0).toUpperCase() + d.confidence.slice(1)
+  const cost = formatUsage(usage, model)
   return [
     '## 🩺 naoru',
     MARKER,
@@ -46,5 +49,6 @@ export function toMarkdown(jobName, d) {
     ...(d.diff ? ['', '```diff', d.diff, '```'] : []),
     '',
     `**Confidence:** ${conf} · _react 👍 / 👎_`,
+    ...(cost ? ['', `<sub>🧮 ${cost}</sub>`] : []),
   ].join('\n')
 }

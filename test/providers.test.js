@@ -31,37 +31,52 @@ describe('resolveProvider', () => {
   it('honors explicit model override', () => {
     expect(resolveProvider({ provider: 'openai', apiKey: 'k', model: 'gpt-4o-mini' }).model).toBe('gpt-4o-mini')
   })
+  it('defaults max tokens high enough for a diff, and honors an override', () => {
+    expect(resolveProvider({ provider: 'openai', apiKey: 'k' }).maxTokens).toBe(2048)
+    expect(resolveProvider({ provider: 'openai', apiKey: 'k', maxTokens: 4000 }).maxTokens).toBe(4000)
+    expect(resolveProvider({ provider: 'openai', apiKey: 'k', maxTokens: 0 }).maxTokens).toBe(2048)
+    expect(resolveProvider({ provider: 'openai', apiKey: 'k', maxTokens: NaN }).maxTokens).toBe(2048)
+  })
+})
+
+const anthropicCreate = vi.fn().mockResolvedValue({
+  content: [{ type: 'tool_use', name: 'report_diagnosis', input: { rootCause: 'a', suggestedFix: 'b', confidence: 'high', files: [] } }],
+  usage: { input_tokens: 900, output_tokens: 120 },
+})
+const openaiCreate = vi.fn().mockResolvedValue({
+  choices: [{ message: { tool_calls: [{ function: { name: 'report_diagnosis', arguments: JSON.stringify({ rootCause: 'a', suggestedFix: 'b', confidence: 'low', files: ['x'] }) } }] } }],
+  usage: { prompt_tokens: 40, completion_tokens: 10, total_tokens: 50 },
 })
 
 vi.mock('@anthropic-ai/sdk', () => ({
   default: class {
     constructor() {}
-    messages = { create: vi.fn().mockResolvedValue({
-      content: [{ type: 'tool_use', name: 'report_diagnosis', input: { rootCause: 'a', suggestedFix: 'b', confidence: 'high', files: [] } }],
-    }) }
+    messages = { create: anthropicCreate }
   },
 }))
 
 vi.mock('openai', () => ({
   default: class {
     constructor() {}
-    chat = { completions: { create: vi.fn().mockResolvedValue({
-      choices: [{ message: { tool_calls: [{ function: { name: 'report_diagnosis', arguments: JSON.stringify({ rootCause: 'a', suggestedFix: 'b', confidence: 'low', files: ['x'] }) } }] } }],
-    }) } }
+    chat = { completions: { create: openaiCreate } }
   },
 }))
 
-it('anthropic client returns structured diagnosis', async () => {
+it('anthropic client returns structured diagnosis and usage', async () => {
   const { diagnose } = await import('../src/providers/anthropic.js')
-  const out = await diagnose({ apiKey: 'k', model: 'claude-sonnet-4-6' }, 'prompt')
-  expect(out.rootCause).toBe('a')
-  expect(out.confidence).toBe('high')
+  const out = await diagnose({ apiKey: 'k', model: 'claude-sonnet-4-6', maxTokens: 2048 }, 'prompt')
+  expect(out.raw.rootCause).toBe('a')
+  expect(out.raw.confidence).toBe('high')
+  expect(out.usage).toEqual({ input_tokens: 900, output_tokens: 120 })
+  expect(anthropicCreate).toHaveBeenCalledWith(expect.objectContaining({ max_tokens: 2048 }))
 })
 
-it('openai client returns structured diagnosis', async () => {
+it('openai client returns structured diagnosis and usage', async () => {
   const { diagnose } = await import('../src/providers/openai.js')
-  const out = await diagnose({ apiKey: 'k', baseURL: 'https://api.x.ai/v1', model: 'grok-2' }, 'prompt')
-  expect(out.files).toEqual(['x'])
+  const out = await diagnose({ apiKey: 'k', baseURL: 'https://api.x.ai/v1', model: 'grok-2', maxTokens: 1500 }, 'prompt')
+  expect(out.raw.files).toEqual(['x'])
+  expect(out.usage.total_tokens).toBe(50)
+  expect(openaiCreate).toHaveBeenCalledWith(expect.objectContaining({ max_tokens: 1500 }))
 })
 
 describe('parseFallbackContent', () => {
@@ -71,6 +86,16 @@ describe('parseFallbackContent', () => {
   it('recovers a fenced json block', async () => {
     const { parseFallbackContent } = await load()
     expect(parseFallbackContent('here you go:\n```json\n' + JSON.stringify(body) + '\n```')).toEqual(body)
+  })
+  it('still reports usage when it fell back to content', async () => {
+    openaiCreate.mockResolvedValueOnce({
+      choices: [{ message: { content: '```json\n' + JSON.stringify(body) + '\n```' } }],
+      usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 },
+    })
+    const { diagnose } = await load()
+    const out = await diagnose({ apiKey: 'k', baseURL: 'https://x', model: 'm', maxTokens: 100 }, 'p')
+    expect(out.raw.rootCause).toBe('a')
+    expect(out.usage.total_tokens).toBe(10)
   })
   it('recovers bare json wrapped in prose', async () => {
     const { parseFallbackContent } = await load()

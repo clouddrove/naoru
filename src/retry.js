@@ -11,11 +11,15 @@ export function isRetryable(e) {
   return RETRYABLE_STATUS.has(status) || RETRYABLE_MESSAGE.test(String(e?.message || ''))
 }
 
-// Providers often say how long to wait ("Please try again in 39.69s").
-export function retryDelayMs(e, attempt) {
+// Providers often say how long to wait ("Please try again in 39.69s"), and send
+// the same hint to every caller. Without jitter, ten workflows that rate-limited
+// together would retry in lockstep and rate-limit together again — so spread
+// each wait over ±25%. `rand` is injectable to keep the tests deterministic.
+export function retryDelayMs(e, attempt, rand = Math.random) {
   const hinted = String(e?.message || '').match(/try again in ([\d.]+)\s*s/i)
   const ms = hinted ? Math.ceil(parseFloat(hinted[1]) * 1000) + 1000 : 5000 * 2 ** attempt
-  return Math.min(ms, 90_000)
+  const jittered = ms * (0.75 + rand() * 0.5)
+  return Math.round(Math.min(jittered, 90_000))
 }
 
 export async function withRetry(fn, { attempts = 4, log = () => {}, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {

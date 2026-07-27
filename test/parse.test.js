@@ -46,4 +46,14 @@ describe('toMarkdown', () => {
     expect(md).toContain('\n```diff\n- a\n+ b\n```\n')
     expect(md.indexOf('**Confidence:**')).toBeGreaterThan(md.indexOf('```diff'))
   })
+  it('appends the token cost when the provider reported usage', () => {
+    const md = toMarkdown('build', normalize(raw), { usage: { input: 900, output: 120, total: 1020 }, model: 'gpt-4o' })
+    expect(md).toContain('1,020 tokens (900 in / 120 out)')
+    expect(md).toContain('gpt-4o')
+  })
+  it('omits the cost line entirely when usage is unknown', () => {
+    const md = toMarkdown('build', normalize(raw), { usage: { input: null, output: null, total: null } })
+    expect(md).not.toContain('tokens')
+    expect(md.trimEnd().endsWith('_react 👍 / 👎_')).toBe(true)
+  })
 })
