@@ -3,9 +3,15 @@
 export const FIX_BRANCH_PREFIX = 'naoru/fix-'
 export const FIX_LABEL = 'naoru-fix'
 
-// Workflow files are attacker-reachable via log content (prompt injection);
-// never let a generated diff touch them.
-const PROTECTED_PATH = /^\.github\//
+// Log content is attacker-reachable (a dependency or test can print anything),
+// so a generated diff has to be treated as untrusted input. Opening a fix PR
+// makes CI run whatever is on that branch, so the block list covers files that
+// execute during checkout, install, or build — not just workflow definitions.
+//
+// package.json is deliberately NOT here: a dependency-version fix is one of the
+// most common legitimate repairs, and its `scripts` risk still needs a human to
+// open the PR. Add it via `protected-paths` if that trade isn't right for you.
+const PROTECTED_PATH = /^\.github\/|(^|\/)(\.npmrc|\.yarnrc(\.yml)?|\.pnpmfile\.cjs|Dockerfile[^/]*|Makefile|\.gitattributes|\.git-blame-ignore-revs)$|\.(sh|bash|zsh|ps1|bat|cmd)$/i
 
 // Parse a unified diff into per-file hunks. Tolerates model sloppiness:
 // `diff --git` headers with no `---`/`+++` lines, `a/`/`b/` prefixes optional,
@@ -114,9 +120,11 @@ export function applyHunksPartial(content, hunks) {
 }
 
 // Sanity-gate a parsed diff before acting on it. Returns an error string or null.
-export function validateFix(files, { maxChangedLines = 300 } = {}) {
+export function validateFix(files, { maxChangedLines = 300, extraProtected = [] } = {}) {
   if (!files.length) return 'no parsable file changes in the diagnosed diff'
-  const bad = files.find((f) => PROTECTED_PATH.test(f.path) || f.path.includes('..'))
+  const blocked = (p) =>
+    PROTECTED_PATH.test(p) || p.includes('..') || p.startsWith('/') || extraProtected.some((re) => re.test(p))
+  const bad = files.find((f) => blocked(f.path))
   if (bad) return `refusing to modify protected path: ${bad.path}`
   const changed = files.reduce(
     (n, f) => n + f.hunks.reduce((m, h) => m + h.lines.filter((l) => l.op !== ' ').length, 0),

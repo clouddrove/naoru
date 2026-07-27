@@ -31,17 +31,23 @@ export function findStickyComment(comments) {
 // Fetch tailed logs for the failed job. Uses the per-JOB log endpoint (plain text),
 // which is available as soon as the job finishes — even while the overall run is still
 // in progress (the run-level zip 404s until the whole run completes).
+//
+// Returns { logs, error }. A failure here is reported rather than stuffed into
+// `logs` as prose: diagnosing the string "(could not fetch logs)" burns a paid
+// call to produce a confident answer about nothing.
 export async function fetchLogs(octokit, { owner, repo, runId, jobName, maxLines }) {
   try {
     const jobs = await octokit.paginate(octokit.rest.actions.listJobsForWorkflowRun, {
       owner, repo, run_id: runId, per_page: 100,
     })
     const job = pickFailedJob(jobs, jobName)
-    if (!job) return '(no failed job found in this run)'
+    if (!job) return { logs: '', error: 'no failed job found in this run' }
     const res = await octokit.rest.actions.downloadJobLogsForWorkflowRun({ owner, repo, job_id: job.id })
-    return tailAndClean(String(res.data), maxLines)
+    const logs = tailAndClean(String(res.data), maxLines)
+    if (!logs.trim()) return { logs: '', error: `the failed job "${job.name}" produced no log output` }
+    return { logs, error: null }
   } catch (e) {
-    return `(could not fetch logs: ${e.message})`
+    return { logs: '', error: `could not fetch logs: ${e.message}` }
   }
 }
 
@@ -72,8 +78,12 @@ export async function fetchPrDiff(octokit, { owner, repo, prNumber }) {
 }
 
 export async function upsertComment(octokit, { owner, repo, prNumber, body }) {
-  const existing = await octokit.rest.issues.listComments({ owner, repo, issue_number: prNumber })
-  const id = findStickyComment(existing.data)
+  // Paginate: the default page size is 30, so on a busy PR the sticky comment
+  // scrolls off page one and naoru starts posting a new comment every run.
+  const existing = await octokit.paginate(octokit.rest.issues.listComments, {
+    owner, repo, issue_number: prNumber, per_page: 100,
+  })
+  const id = findStickyComment(existing)
   if (id) {
     const res = await octokit.rest.issues.updateComment({ owner, repo, comment_id: id, body })
     return res.data.html_url

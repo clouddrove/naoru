@@ -2,10 +2,28 @@ import { readFileSync } from 'node:fs'
 import { getOctokit } from '@actions/github'
 import { diagnose } from './core.js'
 import { tailAndClean, upsertComment } from './github.js'
+import { parsePatternList } from './redact.js'
+import { formatUsage } from './usage.js'
+
+// `--flag=value` as well as `--flag value`.
+function splitFlag(rest) {
+  const eq = rest.indexOf('=')
+  return eq === -1 ? [rest, undefined] : [rest.slice(0, eq), rest.slice(eq + 1)]
+}
 
 export function parseArgs(argv, env) {
   const flags = {}
-  for (let i = 0; i < argv.length; i += 2) flags[argv[i].replace(/^--/, '')] = argv[i + 1]
+  // Walk one token at a time: a bare boolean flag used to consume the next
+  // token as its value and desync every flag after it.
+  for (let i = 0; i < argv.length; i++) {
+    const token = argv[i]
+    if (!token.startsWith('--')) continue
+    const [name, inline] = splitFlag(token.slice(2))
+    if (inline !== undefined) { flags[name] = inline; continue }
+    const next = argv[i + 1]
+    if (next === undefined || next.startsWith('--')) flags[name] = true
+    else { flags[name] = next; i++ }
+  }
   return {
     apiKey: flags['api-key'] || env.NAORU_API_KEY,
     provider: flags.provider || env.NAORU_PROVIDER || 'anthropic',
@@ -16,6 +34,8 @@ export function parseArgs(argv, env) {
     jobName: flags['job-name'] || env.NAORU_JOB_NAME || 'pipeline',
     instructions: flags.prompt || env.NAORU_PROMPT,
     maxLines: parseInt(flags['max-log-lines'] || env.NAORU_MAX_LOG_LINES || '500', 10),
+    maxTokens: parseInt(flags['max-tokens'] || env.NAORU_MAX_TOKENS || '0', 10),
+    redactPatterns: parsePatternList(flags['redact-patterns'] || env.NAORU_REDACT_PATTERNS),
     githubToken: flags['github-token'] || env.GITHUB_TOKEN,
     repo: flags.repo,
     pr: flags.pr ? parseInt(flags.pr, 10) : undefined,
@@ -34,12 +54,16 @@ async function run() {
   const logs = tailAndClean(rawLogs, a.maxLines)
   const diff = a.diffFile ? readFileSync(a.diffFile, 'utf8') : ''
 
-  const { diagnosis, markdown } = await diagnose({
+  const { diagnosis, usage, model, markdown } = await diagnose({
     provider: a.provider, apiKey: a.apiKey, baseURL: a.baseURL, model: a.model,
-    jobName: a.jobName, logs, diff, files: [], instructions: a.instructions,
+    maxTokens: a.maxTokens, jobName: a.jobName, logs, diff, files: [],
+    instructions: a.instructions, redactPatterns: a.redactPatterns,
   })
 
   console.log(markdown)
+  // Cost goes to stderr so `naoru > diagnosis.md` stays clean.
+  const cost = formatUsage(usage, model)
+  if (cost) console.error(`naoru: ${cost}`)
 
   if (a.repo && a.pr && a.githubToken) {
     const [owner, repo] = a.repo.split('/')

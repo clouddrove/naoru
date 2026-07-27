@@ -25,6 +25,21 @@ inputs:
     description: 'Tail this many log lines.'
     required: false
     default: '500'
+  max-tokens:
+    description: 'Cap the model response. Too low truncates the diff mid-hunk and disables fix-mode.'
+    required: false
+    default: '2048'
+  redact-patterns:
+    description: >-
+      Extra regexes (one per line) scrubbed from logs and the diff before they
+      reach the model. Common secret shapes — PEM blocks, JWTs, bearer tokens,
+      cloud keys, credentials in URLs — are already redacted by default.
+    required: false
+  protected-paths:
+    description: >-
+      Extra regexes (one per line) that fix-mode must never modify, on top of the
+      built-in list (.github/, Dockerfile, Makefile, .npmrc, shell scripts).
+    required: false
   failed-job-name:
     description: 'Explicit failed job name (optional).'
     required: false
@@ -52,6 +67,12 @@ outputs:
     description: 'URL of the posted/updated PR comment.'
   fix-pr-url:
     description: 'URL of the auto-opened fix PR (fix-mode: pr only).'
+  tokens-input:
+    description: 'Prompt tokens billed for the diagnosis (empty if the provider reports none).'
+  tokens-output:
+    description: 'Completion tokens billed for the diagnosis.'
+  tokens-total:
+    description: 'Total tokens billed for the diagnosis.'
 runs:
   using: 'node24'
   main: 'dist/index.js'

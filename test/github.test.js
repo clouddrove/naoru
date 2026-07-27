@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { tailAndClean, findStickyComment, pickFailedJob, filterDiff } from '../src/github.js'
+import { describe, it, expect, vi } from 'vitest'
+import { tailAndClean, findStickyComment, pickFailedJob, filterDiff, fetchLogs, upsertComment } from '../src/github.js'
 import { MARKER } from '../src/parse.js'
 
 describe('tailAndClean', () => {
@@ -42,6 +42,72 @@ describe('pickFailedJob', () => {
   })
   it('returns null when nothing failed', () => {
     expect(pickFailedJob([{ id: 9, name: 'x', conclusion: 'success' }], 'x')).toBeNull()
+  })
+})
+
+describe('fetchLogs', () => {
+  const jobs = [{ id: 7, name: 'break', conclusion: 'failure' }]
+
+  it('returns tailed logs with no error', async () => {
+    const octokit = {
+      paginate: vi.fn().mockResolvedValue(jobs),
+      rest: { actions: { downloadJobLogsForWorkflowRun: vi.fn().mockResolvedValue({ data: 'boom' }) } },
+    }
+    await expect(fetchLogs(octokit, { owner: 'o', repo: 'r', runId: 1, maxLines: 10 }))
+      .resolves.toEqual({ logs: 'boom', error: null })
+  })
+
+  it('reports an error instead of returning prose the model would diagnose', async () => {
+    const octokit = {
+      paginate: vi.fn().mockRejectedValue(new Error('403')),
+      rest: { actions: { downloadJobLogsForWorkflowRun: vi.fn() } },
+    }
+    const out = await fetchLogs(octokit, { owner: 'o', repo: 'r', runId: 1, maxLines: 10 })
+    expect(out.logs).toBe('')
+    expect(out.error).toMatch(/could not fetch logs: 403/)
+  })
+
+  it('reports empty log output as an error', async () => {
+    const octokit = {
+      paginate: vi.fn().mockResolvedValue(jobs),
+      rest: { actions: { downloadJobLogsForWorkflowRun: vi.fn().mockResolvedValue({ data: '   \n ' }) } },
+    }
+    expect((await fetchLogs(octokit, { owner: 'o', repo: 'r', runId: 1, maxLines: 10 })).error)
+      .toMatch(/produced no log output/)
+  })
+
+  it('reports when nothing in the run failed', async () => {
+    const octokit = {
+      paginate: vi.fn().mockResolvedValue([{ id: 1, name: 'ok', conclusion: 'success' }]),
+      rest: { actions: { downloadJobLogsForWorkflowRun: vi.fn() } },
+    }
+    expect((await fetchLogs(octokit, { owner: 'o', repo: 'r', runId: 1, maxLines: 10 })).error)
+      .toMatch(/no failed job/)
+  })
+})
+
+describe('upsertComment', () => {
+  const rest = () => ({
+    issues: {
+      listComments: vi.fn(),
+      updateComment: vi.fn().mockResolvedValue({ data: { html_url: 'updated' } }),
+      createComment: vi.fn().mockResolvedValue({ data: { html_url: 'created' } }),
+    },
+  })
+
+  it('finds the sticky comment beyond the first page of results', async () => {
+    // 30 is the API default page size — the marker here would be invisible
+    // without pagination, and naoru would post a duplicate on every run.
+    const older = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, body: 'chatter' }))
+    const octokit = { paginate: vi.fn().mockResolvedValue([...older, { id: 99, body: MARKER }]), rest: rest() }
+    await expect(upsertComment(octokit, { owner: 'o', repo: 'r', prNumber: 1, body: 'x' })).resolves.toBe('updated')
+    expect(octokit.rest.issues.updateComment).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 99 }))
+    expect(octokit.paginate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ per_page: 100 }))
+  })
+
+  it('creates a comment when no marker exists', async () => {
+    const octokit = { paginate: vi.fn().mockResolvedValue([{ id: 1, body: 'chatter' }]), rest: rest() }
+    await expect(upsertComment(octokit, { owner: 'o', repo: 'r', prNumber: 1, body: 'x' })).resolves.toBe('created')
   })
 })
 

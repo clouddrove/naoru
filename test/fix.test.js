@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import { parseDiff, applyHunks, applyHunksPartial, locateHunk, validateFix, postSuggestions, openFixPr } from '../src/fix.js'
 
 const DIFF = [
-  '--- a/Dockerfile',
-  '+++ b/Dockerfile',
+  '--- a/src/app.js',
+  '+++ b/src/app.js',
   '@@ -1,4 +1,3 @@',
   ' WORKDIR /app',
   ' COPY . .',
@@ -15,7 +15,7 @@ describe('parseDiff', () => {
   it('parses files and hunks, stripping a/b prefixes', () => {
     const files = parseDiff(DIFF)
     expect(files).toHaveLength(1)
-    expect(files[0].path).toBe('Dockerfile')
+    expect(files[0].path).toBe('src/app.js')
     expect(files[0].hunks[0].lines.filter((l) => l.op === '-')).toHaveLength(1)
   })
   it('tolerates prose around the diff and missing diff --git headers', () => {
@@ -28,19 +28,19 @@ describe('parseDiff', () => {
   })
   it('parses a diff --git header with no ---/+++ lines', () => {
     const files = parseDiff([
-      'diff --git a/Dockerfile b/Dockerfile',
+      'diff --git a/src/app.js b/src/app.js',
       '@@ -1,2 +1,1 @@',
       ' WORKDIR /app',
       '-COPY missing-file.txt /app/',
     ].join('\n'))
     expect(files).toHaveLength(1)
-    expect(files[0].path).toBe('Dockerfile')
+    expect(files[0].path).toBe('src/app.js')
     expect(files[0].hunks).toHaveLength(1)
   })
   it('does not duplicate a file when diff --git is followed by ---/+++ headers', () => {
-    const files = parseDiff(`diff --git a/Dockerfile b/Dockerfile\n${DIFF}`)
+    const files = parseDiff(`diff --git a/src/app.js b/src/app.js\n${DIFF}`)
     expect(files).toHaveLength(1)
-    expect(files[0].path).toBe('Dockerfile')
+    expect(files[0].path).toBe('src/app.js')
     expect(files[0].hunks).toHaveLength(1)
   })
 })
@@ -98,12 +98,36 @@ describe('applyHunks / locateHunk', () => {
 })
 
 describe('validateFix', () => {
+  const forPath = (p) => parseDiff(`--- a/${p}\n+++ b/${p}\n@@\n-a\n+b`)
+
   it('rejects empty, protected paths, traversal, and oversized diffs', () => {
     expect(validateFix([])).toMatch(/no parsable/)
-    expect(validateFix(parseDiff('--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@\n-a\n+b'))).toMatch(/protected/)
+    expect(validateFix(forPath('.github/workflows/ci.yml'))).toMatch(/protected/)
     const big = parseDiff(DIFF)
     expect(validateFix(big, { maxChangedLines: 0 })).toMatch(/too large/)
     expect(validateFix(big)).toBeNull()
+  })
+
+  // Opening a fix PR makes CI execute the branch, so anything that runs during
+  // checkout/install/build is off limits to a model-generated diff.
+  it('rejects files that execute during checkout, install, or build', () => {
+    for (const p of ['Dockerfile', 'docker/Dockerfile.prod', 'Makefile', '.npmrc', '.yarnrc.yml', 'scripts/deploy.sh', 'tools/run.ps1']) {
+      expect(validateFix(forPath(p)), p).toMatch(/protected/)
+    }
+  })
+
+  it('rejects traversal and absolute paths', () => {
+    expect(validateFix(forPath('../../etc/passwd'))).toMatch(/protected/)
+    expect(validateFix(forPath('/etc/passwd'))).toMatch(/protected/)
+  })
+
+  it('still allows ordinary source and manifest fixes', () => {
+    expect(validateFix(forPath('src/auth.ts'))).toBeNull()
+    expect(validateFix(forPath('package.json'))).toBeNull()
+  })
+
+  it('honors caller-supplied protected patterns', () => {
+    expect(validateFix(forPath('package.json'), { extraProtected: [/^package\.json$/] })).toMatch(/protected/)
   })
 })
 
@@ -140,7 +164,7 @@ describe('postSuggestions', () => {
     })
     expect(posted).toBe(1)
     const call = octokit.rest.pulls.createReviewComment.mock.calls[0][0]
-    expect(call.path).toBe('Dockerfile')
+    expect(call.path).toBe('src/app.js')
     expect(call.start_line).toBe(1)
     expect(call.line).toBe(4)
     expect(call.body).toContain('```suggestion')

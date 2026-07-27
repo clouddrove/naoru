@@ -12,12 +12,21 @@ describe('isRetryable', () => {
 })
 
 describe('retryDelayMs', () => {
+  const noJitter = () => 0.5
+
   it('honors the provider "try again in Xs" hint', () => {
-    expect(retryDelayMs({ message: 'Please try again in 39.69s.' }, 0)).toBe(40690)
+    expect(retryDelayMs({ message: 'Please try again in 39.69s.' }, 0, noJitter)).toBe(40690)
   })
   it('falls back to exponential backoff, capped', () => {
-    expect(retryDelayMs({ message: 'overloaded' }, 0)).toBe(5000)
-    expect(retryDelayMs({ message: 'overloaded' }, 10)).toBe(90000)
+    expect(retryDelayMs({ message: 'overloaded' }, 0, noJitter)).toBe(5000)
+    expect(retryDelayMs({ message: 'overloaded' }, 10, noJitter)).toBe(90000)
+  })
+  it('spreads the wait over ±25% so rate-limited callers do not retry in lockstep', () => {
+    expect(retryDelayMs({ message: 'overloaded' }, 0, () => 0)).toBe(3750)
+    expect(retryDelayMs({ message: 'overloaded' }, 0, () => 1)).toBe(6250)
+  })
+  it('never exceeds the cap even at maximum jitter', () => {
+    expect(retryDelayMs({ message: 'overloaded' }, 10, () => 1)).toBe(90000)
   })
 })
 

@@ -12,7 +12,11 @@ const PRESETS = {
   custom:     { kind: 'openai' },
 }
 
-export function resolveProvider({ provider = 'anthropic', apiKey, baseURL, model }) {
+// 1024 truncated long diffs mid-hunk, which parseDiff then rejected and
+// fix-mode silently skipped.
+export const DEFAULT_MAX_TOKENS = 2048
+
+export function resolveProvider({ provider = 'anthropic', apiKey, baseURL, model, maxTokens }) {
   const preset = PRESETS[provider]
   if (!preset) throw new Error(`Unknown provider: ${provider}`)
   if (!apiKey) throw new Error('api-key is required')
@@ -23,6 +27,7 @@ export function resolveProvider({ provider = 'anthropic', apiKey, baseURL, model
     apiKey,
     baseURL: resolvedBaseURL,
     model: model || preset.model,
+    maxTokens: maxTokens > 0 ? maxTokens : DEFAULT_MAX_TOKENS,
     toolChoice: preset.toolChoice,
   }
 }

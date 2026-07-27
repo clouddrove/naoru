@@ -181,6 +181,8 @@ See [`examples/gitlab-dind.yml`](examples/gitlab-dind.yml).
 | `NAORU_DIFF_FILE` | `--diff-file` | path to diff (optional) |
 | `NAORU_JOB_NAME` | `--job-name` | name of the failed job (default `pipeline`) |
 | `NAORU_PROMPT` | `--prompt` | override the model instructions (optional) |
+| `NAORU_MAX_TOKENS` | `--max-tokens` | cap the model response (default `2048`) |
+| `NAORU_REDACT_PATTERNS` | `--redact-patterns` | extra regexes to scrub, one per line |
 | `NAORU_MAX_LOG_LINES` | `--max-log-lines` | tail N lines of log (default `500`) |
 | `GITHUB_TOKEN` | `--github-token` | post a comment (optional) |
 | — | `--repo owner/name` | GitHub repo for comment (optional) |
@@ -206,6 +208,9 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | `max-log-lines` | | `500` | Tail this many log lines. |
 | `failed-job-name` | | auto-detect | Explicit failed job name. |
 | `prompt` | | built-in | Override the model instructions — see [Custom prompt](#-custom-prompt). |
+| `max-tokens` | | `2048` | Cap the model response. Too low truncates the diff mid-hunk and disables fix-mode. |
+| `redact-patterns` | | — | Extra regexes (one per line) scrubbed before anything reaches the model — see [What leaves your runner](#-what-leaves-your-runner). |
+| `protected-paths` | | — | Extra regexes (one per line) `fix-mode` must never modify. |
 | `fix-mode` | | `off` | `off` \| `suggest` \| `pr` — see [Auto-fix](#-auto-fix-experimental). |
 
 </details>
@@ -219,8 +224,35 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | `confidence` | `high` \| `medium` \| `low` |
 | `comment-url` | URL of the posted/updated PR comment. |
 | `fix-pr-url` | URL of the auto-opened fix PR (`fix-mode: pr` only). |
+| `tokens-input` | Prompt tokens billed for the diagnosis (empty if the provider reports none). |
+| `tokens-output` | Completion tokens billed. |
+| `tokens-total` | Total tokens billed. |
 
 </details>
+
+---
+
+## 🔒 What leaves your runner
+
+naoru sends the tailed job log and the PR diff to the LLM provider you configured. Before that happens it scrubs the recognisable secret shapes — PEM private key blocks, JWTs, `Bearer` headers, GitHub/OpenAI/Slack/Google tokens, AWS key IDs, credentials embedded in connection strings, and labelled assignments like `API_KEY=…`.
+
+GitHub already masks secrets it knows about. Redaction covers the rest: a token that arrived in an API response, a printed environment, a connection string in a stack trace.
+
+Add your own shapes with `redact-patterns` (one regex per line):
+
+```yaml
+- uses: clouddrove/naoru@v0
+  if: failure()
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    redact-patterns: |
+      ACME-[0-9]{4,}
+      internal\.example\.com
+```
+
+Every diagnosis also reports what it cost — `tokens-input` / `tokens-output` / `tokens-total` outputs, a `🧮` line on the PR comment, and a run annotation.
+
+> ⚠️ **Never run naoru with `fix-mode` on `pull_request_target` for fork PRs.** That combination hands a write-scoped token to a workflow whose code the PR author controls. naoru detects it and refuses to write, diagnosing only — but the safe trigger is `pull_request`.
 
 ---
 
@@ -262,7 +294,9 @@ naoru can go beyond diagnosing and act on the fix. Opt in with `fix-mode`:
 Safety rails, always on:
 
 - Acts only on **high-confidence** diagnoses that include a diff.
-- Never modifies anything under `.github/` (CI logs are untrusted input — a fix must not be able to rewrite your workflows).
+- Refuses to write on a fork `pull_request_target` run, where the token is write-scoped but the PR head is not yours.
+- Never touches files that execute during checkout, install, or build — `.github/`, `Dockerfile`, `Makefile`, `.npmrc`, `.yarnrc`, shell scripts — nor absolute or `..` paths. Opening a fix PR makes CI run that branch, and CI logs are untrusted input. Extend the list with `protected-paths`.
+- `package.json` is deliberately *not* blocked, since a dependency-version fix is one of the most common legitimate repairs. Add `^package\.json$` to `protected-paths` if you'd rather it were.
 - Caps patches at 300 changed lines; refuses ambiguous or non-matching hunks rather than guessing.
 - Skips runs on naoru's own `naoru/fix-*` branches, so a failing fix can't loop.
 - Best-effort: any fix error is a warning, the diagnosis still ships, your pipeline is never blocked.
