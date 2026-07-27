@@ -8,7 +8,7 @@ inputs:
     description: 'LLM API key (provider-specific).'
     required: true
   provider:
-    description: 'anthropic | openai | openrouter | xai | groq | custom'
+    description: 'anthropic | openai | gemini | openrouter | xai | groq | custom'
     required: false
     default: 'anthropic'
   base-url:
@@ -27,6 +27,13 @@ inputs:
     default: '500'
   failed-job-name:
     description: 'Explicit failed job name (optional).'
+    required: false
+  prompt:
+    description: >-
+      Override the instructions sent to the model — change tone or length, or add
+      repo-specific context. The failed job name, changed files, PR diff, job logs
+      and the diff-format rules that fix-mode depends on are always appended, so an
+      override cannot break auto-fix.
     required: false
   fix-mode:
     description: >-

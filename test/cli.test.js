@@ -12,4 +12,9 @@ describe('parseArgs', () => {
   it('defaults provider to anthropic', () => {
     expect(parseArgs([], { NAORU_API_KEY: 'k' }).provider).toBe('anthropic')
   })
+  it('reads the prompt override from the flag or the env', () => {
+    expect(parseArgs(['--prompt', 'be blunt'], {}).instructions).toBe('be blunt')
+    expect(parseArgs([], { NAORU_PROMPT: 'from env' }).instructions).toBe('from env')
+    expect(parseArgs([], {}).instructions).toBeUndefined()
+  })
 })

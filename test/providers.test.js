@@ -15,6 +15,16 @@ describe('resolveProvider', () => {
   it('maps xai to grok endpoint', () => {
     expect(resolveProvider({ provider: 'xai', apiKey: 'k' }).baseURL).toBe('https://api.x.ai/v1')
   })
+  it('maps gemini to its openai-compatible endpoint', () => {
+    const r = resolveProvider({ provider: 'gemini', apiKey: 'k' })
+    expect(r.kind).toBe('openai')
+    expect(r.baseURL).toBe('https://generativelanguage.googleapis.com/v1beta/openai')
+    expect(r.model).toMatch(/^gemini-/)
+  })
+  it('asks rather than forces the tool call on gemini', () => {
+    expect(resolveProvider({ provider: 'gemini', apiKey: 'k' }).toolChoice).toBe('auto')
+    expect(resolveProvider({ provider: 'openai', apiKey: 'k' }).toolChoice).toBeUndefined()
+  })
   it('requires base-url for custom provider', () => {
     expect(() => resolveProvider({ provider: 'custom', apiKey: 'k' })).toThrow(/base-url/)
   })
@@ -52,4 +62,25 @@ it('openai client returns structured diagnosis', async () => {
   const { diagnose } = await import('../src/providers/openai.js')
   const out = await diagnose({ apiKey: 'k', baseURL: 'https://api.x.ai/v1', model: 'grok-2' }, 'prompt')
   expect(out.files).toEqual(['x'])
+})
+
+describe('parseFallbackContent', () => {
+  const load = () => import('../src/providers/openai.js')
+  const body = { rootCause: 'a', suggestedFix: 'b', confidence: 'high', files: [] }
+
+  it('recovers a fenced json block', async () => {
+    const { parseFallbackContent } = await load()
+    expect(parseFallbackContent('here you go:\n```json\n' + JSON.stringify(body) + '\n```')).toEqual(body)
+  })
+  it('recovers bare json wrapped in prose', async () => {
+    const { parseFallbackContent } = await load()
+    expect(parseFallbackContent('Diagnosis: ' + JSON.stringify(body) + ' hope that helps')).toEqual(body)
+  })
+  it('returns null for prose with no diagnosis object', async () => {
+    const { parseFallbackContent } = await load()
+    expect(parseFallbackContent('the build broke, sorry')).toBeNull()
+    expect(parseFallbackContent('{ not json')).toBeNull()
+    expect(parseFallbackContent('{"unrelated":1}')).toBeNull()
+    expect(parseFallbackContent(null)).toBeNull()
+  })
 })

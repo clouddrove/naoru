@@ -121,6 +121,7 @@ naoru talks to **Anthropic natively** and to everything else through the **OpenA
 |---|---|---|---|
 | `anthropic` | `claude-sonnet-4-6` | Anthropic SDK | `ANTHROPIC_API_KEY` |
 | `openai` | `gpt-4o` | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| `gemini` | `gemini-3.6-flash` | `https://generativelanguage.googleapis.com/v1beta/openai` | `GEMINI_API_KEY` |
 | `openrouter` | `openai/gpt-4o` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
 | `xai` | `grok-2` | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `groq` | `llama-3.3-70b-versatile` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
@@ -179,6 +180,7 @@ See [`examples/gitlab-dind.yml`](examples/gitlab-dind.yml).
 | `NAORU_LOG_FILE` | `--log-file` | path to failed-job log (else read stdin) |
 | `NAORU_DIFF_FILE` | `--diff-file` | path to diff (optional) |
 | `NAORU_JOB_NAME` | `--job-name` | name of the failed job (default `pipeline`) |
+| `NAORU_PROMPT` | `--prompt` | override the model instructions (optional) |
 | `NAORU_MAX_LOG_LINES` | `--max-log-lines` | tail N lines of log (default `500`) |
 | `GITHUB_TOKEN` | `--github-token` | post a comment (optional) |
 | — | `--repo owner/name` | GitHub repo for comment (optional) |
@@ -197,12 +199,13 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | input | required | default | description |
 |---|---|---|---|
 | `api-key` | ✅ | — | LLM API key (provider-specific). |
-| `provider` | | `anthropic` | `anthropic` \| `openai` \| `openrouter` \| `xai` \| `groq` \| `custom` |
+| `provider` | | `anthropic` | `anthropic` \| `openai` \| `gemini` \| `openrouter` \| `xai` \| `groq` \| `custom` |
 | `base-url` | | per-provider | Override endpoint. Required when `provider: custom`. |
 | `model` | | per-provider | Model id. |
 | `github-token` | | `${{ github.token }}` | Token for reading logs and posting comments. |
 | `max-log-lines` | | `500` | Tail this many log lines. |
 | `failed-job-name` | | auto-detect | Explicit failed job name. |
+| `prompt` | | built-in | Override the model instructions — see [Custom prompt](#-custom-prompt). |
 | `fix-mode` | | `off` | `off` \| `suggest` \| `pr` — see [Auto-fix](#-auto-fix-experimental). |
 
 </details>
@@ -218,6 +221,24 @@ With no GitHub target, the CLI prints the diagnosis to stdout and exits 0.
 | `fix-pr-url` | URL of the auto-opened fix PR (`fix-mode: pr` only). |
 
 </details>
+
+---
+
+## ✍️ Custom prompt
+
+The `prompt` input replaces naoru's built-in instructions, so you can change the tone or length, or teach it something about your repo:
+
+```yaml
+- uses: clouddrove/naoru@v0
+  if: failure()
+  with:
+    api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+    prompt: |
+      You are a blunt SRE. Diagnose the failure in under 80 words, no pleasantries.
+      This repo uses pnpm, not npm — never suggest an npm command.
+```
+
+naoru always appends the failed job name, changed files, PR diff, job logs, and the diff-format rules that `fix-mode` relies on. So an override changes *how* the model answers, and can't accidentally break auto-fix. The same thing works from the CLI via `--prompt` / `NAORU_PROMPT`.
 
 ---
 
@@ -262,7 +283,7 @@ Safety rails, always on:
 
 ## 🤝 Contributing
 
-Issues and PRs welcome. `npm ci && npm test` runs the suite; the CI gate also checks the committed `dist/` + `dist-cli/` bundles are fresh (`npm run build && npm run build:cli`).
+Issues and PRs welcome. `npm ci && npm test` runs the suite; the CI gate also checks the bundles still build (`npm run build && npm run build:cli`). `dist/` and `dist-cli/` are gitignored — the release workflow builds them on a tag push and commits them onto the release tag, which is what `uses: clouddrove/naoru@v0` resolves.
 
 ## 📜 License
 

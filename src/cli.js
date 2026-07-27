@@ -14,6 +14,7 @@ export function parseArgs(argv, env) {
     logFile: flags['log-file'] || env.NAORU_LOG_FILE,
     diffFile: flags['diff-file'] || env.NAORU_DIFF_FILE,
     jobName: flags['job-name'] || env.NAORU_JOB_NAME || 'pipeline',
+    instructions: flags.prompt || env.NAORU_PROMPT,
     maxLines: parseInt(flags['max-log-lines'] || env.NAORU_MAX_LOG_LINES || '500', 10),
     githubToken: flags['github-token'] || env.GITHUB_TOKEN,
     repo: flags.repo,
@@ -35,7 +36,7 @@ async function run() {
 
   const { diagnosis, markdown } = await diagnose({
     provider: a.provider, apiKey: a.apiKey, baseURL: a.baseURL, model: a.model,
-    jobName: a.jobName, logs, diff, files: [],
+    jobName: a.jobName, logs, diff, files: [], instructions: a.instructions,
   })
 
   console.log(markdown)

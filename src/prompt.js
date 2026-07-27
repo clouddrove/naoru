@@ -11,15 +11,26 @@ export const DIAGNOSIS_SCHEMA = {
   additionalProperties: false,
 }
 
-export function buildPrompt({ jobName, logs, diff, files }) {
+// Callers can replace this via the `prompt` input to change tone, length, or add
+// repo-specific context. The diff-format rules below and the data sections in
+// buildPrompt are always appended, so an override can't silently break fix-mode.
+export const DEFAULT_INSTRUCTIONS = [
+  'You are naoru, a CI failure diagnostician.',
+  'Analyze the failed GitHub Actions job and return a root cause and a concrete suggested fix.',
+  'Be specific. Put the explanation in suggestedFix as plain prose (no code fences).',
+].join('\n')
+
+const DIFF_RULES = [
+  'When a code change applies, put a minimal unified diff in the diff field as raw text — no ``` fences.',
+  'If confidence is high and the fix is a code change, the diff field is required, not optional.',
+  'Start every file section of the diff with "--- a/<path>" and "+++ b/<path>" header lines, followed by @@ hunks.',
+  'Copy hunk context lines exactly from the PR diff or logs; never invent or paraphrase surrounding code.',
+].join('\n')
+
+export function buildPrompt({ jobName, logs, diff, files, instructions }) {
   return [
-    'You are naoru, a CI failure diagnostician.',
-    'Analyze the failed GitHub Actions job and return a root cause and a concrete suggested fix.',
-    'Be specific. Put the explanation in suggestedFix as plain prose (no code fences).',
-    'When a code change applies, put a minimal unified diff in the diff field as raw text — no ``` fences.',
-    'If confidence is high and the fix is a code change, the diff field is required, not optional.',
-    'Start every file section of the diff with "--- a/<path>" and "+++ b/<path>" header lines, followed by @@ hunks.',
-    'Copy hunk context lines exactly from the PR diff or logs; never invent or paraphrase surrounding code.',
+    instructions?.trim() || DEFAULT_INSTRUCTIONS,
+    DIFF_RULES,
     '',
     `## Failed job\n${jobName}`,
     '',

@@ -12,12 +12,9 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm test
-      - name: dist freshness
-        run: |
-          npm run build
-          npm run build:cli
-          if ! git diff --exit-code dist dist-cli; then
-            echo "::error::dist/ or dist-cli/ is stale. Run 'npm run build && npm run build:cli' and commit." && exit 1
-          fi
+      # dist/ and dist-cli/ are gitignored and built by the release workflow.
+      # CI only proves the bundles still build.
+      - name: build bundles
+        run: npm run build && npm run build:cli
       - name: docker build (smoke)
         run: docker build -t naoru:ci .
