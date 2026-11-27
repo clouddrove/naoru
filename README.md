@@ -324,5 +324,5 @@ Issues and PRs welcome. `npm ci && npm test` runs the suite; the CI gate also ch
 [Apache-2.0](LICENSE) © 2026 [CloudDrove Inc.](https://clouddrove.com)
 
 <div align="center">
-<sub>Built with 🩺 by <a href="https://clouddrove.com">CloudDrove</a> — we build and run cloud infrastructure.</sub>
+<sub>Built with 🩺 by <a href="https://clouddrove.com">CloudDrove</a> — we build and run cloud infrastructure. See the <a href="https://clouddrove.com/naoru">Naoru product page</a> and <a href="https://clouddrove.com/open-source">CloudDrove's open-source Terraform modules and DevOps tools</a>.</sub>
 </div>
